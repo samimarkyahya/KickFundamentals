@@ -1,0 +1,106 @@
+# Kick Fundamentals
+
+A tiny **VST3 / Standalone** metering plugin. Drop it on a kick-drum channel as
+an insert and it continuously displays the three lowest fundamental notes of the
+kick — labelled **LOWEST**, **2ND** and **3RD** — each with its exact frequency
+and cents deviation from the nearest note.
+
+It is a *display-only* insert: audio passes through completely untouched, so it
+is safe to leave anywhere in the chain.
+
+![what it shows: three rows — a big note name, the frequency in Hz, and the cents offset]
+
+## How it works
+
+- Audio is summed to mono and fed through a windowed FFT (16384-point, Hann).
+- Spectral peaks between **30 Hz and 300 Hz** are detected. The three strongest
+  are kept, then ordered by pitch (lowest → highest).
+- Each peak is refined with **parabolic interpolation** on the log-magnitude
+  spectrum, so the reported frequency is accurate to well under 1 Hz even though
+  the raw FFT bins are ~2.7 Hz apart.
+- Frequency is converted to the nearest musical note: `midi = 69 + 12·log2(f/440)`.
+
+Because a kick has a pitch envelope (it glides down in the first few tens of ms),
+the readout reflects the sustained body of the hit, which is what you usually
+mean by "the note of the kick".
+
+## Building
+
+You need [CMake](https://cmake.org/) (≥ 3.22) and a C++17 compiler. JUCE is
+downloaded automatically the first time you configure — nothing to vendor.
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
+
+The built VST3 is copied to your user plugin folder automatically
+(`COPY_PLUGIN_AFTER_BUILD`). A Standalone app is also built so you can test
+without a DAW.
+
+Already have JUCE checked out locally? Skip the download:
+
+```bash
+cmake -B build -DJUCE_LOCAL_DIR=/path/to/JUCE -DCMAKE_BUILD_TYPE=Release
+```
+
+### Cross-compiling a Windows VST3 from Linux (MinGW)
+
+A Windows `.vst3` can be built on Linux with the MinGW-w64 toolchain. JUCE 8's
+mandatory Direct2D 1.3 headers aren't in MinGW, so the cross build pins JUCE 7:
+
+```bash
+sudo apt-get install -y mingw-w64
+cmake -B build-win \
+  -DCMAKE_TOOLCHAIN_FILE=mingw-toolchain.cmake \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DKF_JUCE_TAG=7.0.12
+cmake --build build-win --config Release --target KickFundamentals_VST3 -j4
+```
+
+`mingw-toolchain.cmake` static-links the C++ runtime and explicitly links the
+Win32 libraries JUCE normally auto-links via MSVC `#pragma comment(lib)`. The
+result is a self-contained `Kick Fundamentals.vst3` under
+`build-win/KickFundamentals_artefacts/Release/VST3/`. Note MinGW-built VST3s
+occasionally fail to load in MSVC-only hosts; a native Visual Studio build is the
+guaranteed-clean route.
+
+### Adding an AU build (macOS)
+
+On macOS you can add `AU` to the `FORMATS` list in `CMakeLists.txt`:
+
+```cmake
+FORMATS  VST3 AU Standalone
+```
+
+## Tuning
+
+All knobs live near the top of `Source/KickAnalyzer.h`:
+
+| Setting | Meaning | Default |
+|---|---|---|
+| `fftOrder` | FFT size = `2^fftOrder`. Larger = finer low-end resolution but slower updates. | `14` (16384) |
+| `minFreqHz` / `maxFreqHz` | Frequency window searched for fundamentals. | `30` / `300` Hz |
+| `relativeThresholdDb` | How far below the strongest peak a partial can be and still count. | `-40` dB |
+
+## Controls
+
+| Control | What it does |
+|---|---|
+| **Tune to** | `Auto` shows cents from the nearest note; pick a note (your track's key) and the readout/tuning dot show how far the kick is from that note instead. |
+| **Gate** | Below this input level the display holds its last reading instead of tracking the silence between hits. Also sets the onset sensitivity in Body-only mode. |
+| **Response** | Fast ↔ steady. Trades responsiveness for a rock-steady readout (drives the smoothing amounts). |
+| **Body only** | Skips each kick's transient/punch and analyses only the sustained body, so gliding kicks report their settled resting pitch. |
+
+All four are saved with the project and exposed as host-automatable parameters.
+
+## Layout
+
+```
+CMakeLists.txt              # build + JUCE fetch + logo asset embedding
+Assets/                     # embedded logo artwork (BinaryData)
+Source/
+  KickAnalyzer.{h,cpp}      # FFT + peak detection (the DSP)
+  PluginProcessor.{h,cpp}   # passthrough insert, feeds the analyser
+  PluginEditor.{h,cpp}      # the live note display
+```

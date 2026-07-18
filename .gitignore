@@ -1,0 +1,14 @@
+# Build output
+build/
+cmake-build-*/
+out/
+
+# JUCE fetched via CMake FetchContent
+_deps/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.user
+build-win/
