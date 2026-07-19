@@ -65,13 +65,13 @@ result is a self-contained `Kick Fundamentals.vst3` under
 occasionally fail to load in MSVC-only hosts; a native Visual Studio build is the
 guaranteed-clean route.
 
-### Adding an AU build (macOS)
+### AU build (macOS)
 
-On macOS you can add `AU` to the `FORMATS` list in `CMakeLists.txt`:
-
-```cmake
-FORMATS  VST3 AU Standalone
-```
+`AU` is already in the `FORMATS` list, so building **on a Mac** produces the
+Audio Unit (`.component`) alongside the VST3 automatically — that's the format
+Logic Pro and GarageBand load. On Windows/Linux the AU format is simply ignored.
+AU can only be built on macOS (it needs Apple's AudioUnit SDK); it cannot be
+cross-compiled.
 
 ## Tuning
 

@@ -39,7 +39,8 @@ set(KF_PLUGIN_ARGS
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     PLUGIN_MANUFACTURER_CODE  Evof
     PLUGIN_CODE               Kfnd
-    FORMATS                   VST3 Standalone
+    # AU is macOS-only (built on a Mac); it is ignored on other platforms.
+    FORMATS                   VST3 AU Standalone
     PRODUCT_NAME              "Kick Fundamentals")
 
 if(CMAKE_CROSSCOMPILING)
