@@ -69,6 +69,18 @@ public:
     /** false = analyse the whole hit; true = analyse only the settled body. */
     void setBodyOnly (bool b) noexcept { paramBodyOnly.store (b); }
 
+    /** Frequency window searched for the drum's partials (per drum type). */
+    void setFreqRange (float loHz, float hiHz) noexcept
+    {
+        paramMinFreq.store (loHz);
+        paramMaxFreq.store (hiHz);
+    }
+
+    /** false: main readout is the LOWEST partial (kick/toms/snare).
+        true:  main readout is the LOUDEST partial (cymbals — the dominant ring
+        the ear latches onto, which isn't necessarily the lowest). */
+    void setMainIsLoudest (bool b) noexcept { paramMainLoudest.store (b); }
+
 private:
     void analyseCurrentBlock();
     bool stageBlockFrom (const std::array<float, fftSize>& src, int startIndex) noexcept;
@@ -104,16 +116,17 @@ private:
     std::array<float, numFundamentals>  shownFreq {};     // per-slot freq EMA
     bool haveShown = false;
 
-    // Kick fundamentals live comfortably inside this range.
-    static constexpr float minFreqHz            = 30.0f;
-    static constexpr float maxFreqHz            = 300.0f;
+    // How far below the strongest peak a partial can be and still count.
     static constexpr float relativeThresholdDb  = -40.0f;
 
-    // Runtime parameters (see setters). Defaults match the previous fixed knobs.
+    // Runtime parameters (see setters). Defaults match the kick.
     std::atomic<float> paramGateDb        { -55.0f };
     std::atomic<float> paramMagSmoothing  {  0.82f };
     std::atomic<float> paramFreqSmoothing {  0.78f };
     std::atomic<bool>  paramBodyOnly      { false };
+    std::atomic<float> paramMinFreq       {  30.0f };
+    std::atomic<float> paramMaxFreq       { 250.0f };
+    std::atomic<bool>  paramMainLoudest   { false };
 
     std::array<std::atomic<float>, numFundamentals> freqHz;
     std::array<std::atomic<float>, numFundamentals> levelDb;

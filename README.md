@@ -1,20 +1,32 @@
-# Kick Fundamentals
+# Drum Fundamentals — by Faderhead
 
-A tiny **VST3 / Standalone** metering plugin. Drop it on a kick-drum channel as
-an insert and it continuously displays the three lowest fundamental notes of the
-kick — labelled **LOWEST**, **2ND** and **3RD** — each with its exact frequency
-and cents deviation from the nearest note.
+A **VST3 / AU / Standalone** metering plugin. Drop it on a drum channel as an
+insert and it continuously shows the tuning of the hit: a big main note with a
+±50-cent tuning dot, plus two secondary partials — each with its exact frequency
+and cents deviation.
+
+Pick the drum with the **tab bar** (Kick · Toms · Snare · Cymbals). Each tab
+recolours the interface and switches the analysis to that drum's frequency range:
+
+| Tab | Colour | Range | Main note = |
+|---|---|---|---|
+| Kick | blue | 30–250 Hz | lowest fundamental |
+| Toms | green | 70–350 Hz | lowest fundamental |
+| Snare | red | 120–500 Hz | lowest fundamental |
+| Cymbals | light grey | 500–8000 Hz | **loudest** ring partial |
+
+Pitched drums (kick/toms/snare) read the lowest fundamental as the main note.
+Cymbals have no low fundamental, so the ear follows the loudest ring — that tab
+tracks the strongest partial instead, letting you match a hat/ride to the key.
 
 It is a *display-only* insert: audio passes through completely untouched, so it
 is safe to leave anywhere in the chain.
 
-![what it shows: three rows — a big note name, the frequency in Hz, and the cents offset]
-
 ## How it works
 
 - Audio is summed to mono and fed through a windowed FFT (16384-point, Hann).
-- Spectral peaks between **30 Hz and 300 Hz** are detected. The three strongest
-  are kept, then ordered by pitch (lowest → highest).
+- Spectral peaks inside the selected drum's range are detected. The three
+  strongest are kept, then ordered for display.
 - Each peak is refined with **parabolic interpolation** on the log-magnitude
   spectrum, so the reported frequency is accurate to well under 1 Hz even though
   the raw FFT bins are ~2.7 Hz apart.

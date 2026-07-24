@@ -12,6 +12,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void mouseDown (const juce::MouseEvent&) override;
 
 private:
     void timerCallback() override;
@@ -22,9 +23,17 @@ private:
     // Cents from a frequency to the nearest occurrence of a pitch class (0=C..11=B).
     static float centsToPitchClass (float freqHz, int pitchClass);
 
+    // Per-drum identity (accent colour, tab name, hero label, search range).
+    static constexpr int numDrums = 4;
+    static juce::Colour drumAccent  (int d);
+    static const char*  drumTabName (int d);
+    static const char*  heroLabelFor(int d);
+    static juce::String rangeTextFor(int d);
+    void applyDrumTheme (int d);
+
     struct Layout
     {
-        juce::Rectangle<int> title, byline, hero, targetLabel, targetBox,
+        juce::Rectangle<int> title, byline, tabs, range, hero, targetLabel, targetBox,
                              bodyToggle, row2, row3, gate, response, hint, footer;
     };
     static Layout computeLayout (juce::Rectangle<int> bounds);
@@ -36,6 +45,7 @@ private:
         TooltipZone() { setInterceptsMouseClicks (true, false); }
     };
 
+    void drawTabs (juce::Graphics& g, juce::Rectangle<int> area);
     void drawHero (juce::Graphics& g, juce::Rectangle<int> area);
     void drawSmallRow (juce::Graphics& g, juce::Rectangle<int> area,
                        const juce::String& tag, int index);
@@ -46,7 +56,7 @@ private:
 
     KickFundamentalsProcessor& processor;
 
-    juce::Image logoTitle, logoByline;
+    juce::Image logoByline;
 
     juce::Slider   gateSlider, responseSlider;
     juce::ComboBox targetBox;
@@ -65,6 +75,10 @@ private:
     std::unique_ptr<ButtonAtt> bodyAtt;
 
     std::atomic<float>* targetParam = nullptr;
+    std::atomic<float>* drumParam   = nullptr;
+
+    juce::Colour accent { 0xff4a90d9 };
+    int currentDrum = -1; // -1 forces the first applyDrumTheme()
 
     static constexpr const char* partialTags[] = { "2ND PARTIAL", "3RD PARTIAL" };
 

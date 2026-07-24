@@ -24,6 +24,10 @@ KickFundamentalsProcessor::createParameterLayout()
     layout.add (std::make_unique<AudioParameterBool> (
         ParameterID { kBodyOnlyId, 1 }, "Body Only", false));
 
+    layout.add (std::make_unique<AudioParameterChoice> (
+        ParameterID { kDrumId, 1 }, "Drum",
+        StringArray { "Kick", "Toms", "Snare", "Cymbals" }, 0));
+
     return layout;
 }
 
@@ -36,6 +40,21 @@ KickFundamentalsProcessor::KickFundamentalsProcessor()
     gateParam     = apvts.getRawParameterValue (kGateId);
     responseParam = apvts.getRawParameterValue (kResponseId);
     bodyOnlyParam = apvts.getRawParameterValue (kBodyOnlyId);
+    drumParam     = apvts.getRawParameterValue (kDrumId);
+}
+
+// Per-drum analysis settings: search range (Hz) and whether the main readout
+// follows the loudest partial (cymbals) instead of the lowest.
+KickFundamentalsProcessor::DrumConfig
+KickFundamentalsProcessor::configForDrum (int drum) noexcept
+{
+    switch (drum)
+    {
+        case 1:  return { 70.0f,  350.0f,  false }; // Toms
+        case 2:  return { 120.0f, 500.0f,  false }; // Snare
+        case 3:  return { 500.0f, 8000.0f, true  }; // Cymbals (main = loudest ring)
+        default: return { 30.0f,  250.0f,  false }; // Kick
+    }
 }
 
 void KickFundamentalsProcessor::prepareToPlay (double sampleRate, int)
@@ -65,6 +84,13 @@ void KickFundamentalsProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     if (gateParam     != nullptr) analyzer.setGateDb   (gateParam->load());
     if (responseParam != nullptr) analyzer.setResponse (responseParam->load());
     if (bodyOnlyParam != nullptr) analyzer.setBodyOnly (bodyOnlyParam->load() > 0.5f);
+
+    if (drumParam != nullptr)
+    {
+        const auto cfg = configForDrum ((int) (drumParam->load() + 0.5f));
+        analyzer.setFreqRange (cfg.minHz, cfg.maxHz);
+        analyzer.setMainIsLoudest (cfg.mainIsLoudest);
+    }
 
     const int numSamples  = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();

@@ -21,7 +21,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
 
-    const juce::String getName() const override { return "Kick Fundamentals"; }
+    const juce::String getName() const override { return "Drum Fundamentals"; }
 
     bool acceptsMidi() const override  { return false; }
     bool producesMidi() const override { return false; }
@@ -45,6 +45,11 @@ public:
     static constexpr const char* kResponseId = "response";
     static constexpr const char* kTargetId   = "target";
     static constexpr const char* kBodyOnlyId = "bodyonly";
+    static constexpr const char* kDrumId     = "drum";
+
+    // Per-drum analysis settings.
+    struct DrumConfig { float minHz; float maxHz; bool mainIsLoudest; };
+    static DrumConfig configForDrum (int drum) noexcept;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -56,6 +61,7 @@ private:
     std::atomic<float>* gateParam     = nullptr;
     std::atomic<float>* responseParam = nullptr;
     std::atomic<float>* bodyOnlyParam = nullptr;
+    std::atomic<float>* drumParam     = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KickFundamentalsProcessor)
 };

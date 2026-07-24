@@ -31,7 +31,7 @@ endif()
 # Assemble juce_add_plugin arguments, adjusting for cross-compilation and JUCE
 # version differences.
 set(KF_PLUGIN_ARGS
-    COMPANY_NAME              "EVO"
+    COMPANY_NAME              "Faderhead"
     IS_SYNTH                  FALSE
     NEEDS_MIDI_INPUT          FALSE
     NEEDS_MIDI_OUTPUT         FALSE
@@ -41,7 +41,7 @@ set(KF_PLUGIN_ARGS
     PLUGIN_CODE               Kfnd
     # AU is macOS-only (built on a Mac); it is ignored on other platforms.
     FORMATS                   VST3 AU Standalone
-    PRODUCT_NAME              "Kick Fundamentals")
+    PRODUCT_NAME              "Drum Fundamentals")
 
 if(CMAKE_CROSSCOMPILING)
     # The post-build copy targets a host path and the VST3 manifest helper is a

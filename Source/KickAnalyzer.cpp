@@ -148,6 +148,9 @@ void KickAnalyzer::analyseCurrentBlock()
 
     const auto binToFreq = [this] (double bin) { return bin * sampleRateHz / (double) fftSize; };
 
+    const float minFreqHz = paramMinFreq.load();
+    const float maxFreqHz = paramMaxFreq.load();
+
     const int minBin = juce::jmax (1, (int) std::floor (minFreqHz * fftSize / sampleRateHz));
     const int maxBin = juce::jmin (halfSize - 1, (int) std::ceil (maxFreqHz * fftSize / sampleRateHz));
 
@@ -190,9 +193,12 @@ void KickAnalyzer::analyseCurrentBlock()
     if ((int) peaks.size() > numFundamentals)
         peaks.resize (numFundamentals);
 
-    // ...then present them ordered by pitch: lowest, 2nd, 3rd.
-    std::sort (peaks.begin(), peaks.end(),
-               [] (const Peak& x, const Peak& y) { return x.freq < y.freq; });
+    // ...then order them for display. Pitched drums (kick/toms/snare) read the
+    // LOWEST partial as the main note. Cymbals have no low fundamental, so the
+    // ear follows the LOUDEST ring — keep the magnitude order (main = loudest).
+    if (! paramMainLoudest.load())
+        std::sort (peaks.begin(), peaks.end(),
+                   [] (const Peak& x, const Peak& y) { return x.freq < y.freq; });
 
     for (int i = 0; i < numFundamentals; ++i)
     {
