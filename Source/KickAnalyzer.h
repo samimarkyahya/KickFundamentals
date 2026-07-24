@@ -77,6 +77,11 @@ public:
         the ear latches onto, which isn't necessarily the lowest). */
     void setMainIsLoudest (bool b) noexcept { paramMainLoudest.store (b); }
 
+    /** Cymbal path only: true = report the spectral centroid ("brightness"), a
+        stable energy-weighted mean frequency, instead of the dominant partial.
+        Good for short, dry metallic hits that have no sustained ring to lock to. */
+    void setUseCentroid (bool b) noexcept { paramUseCentroid.store (b); }
+
 private:
     void analyseCurrentBlock();
     bool stageBlockFrom (const std::array<float, fftSize>& src, int startIndex) noexcept;
@@ -133,6 +138,7 @@ private:
     std::atomic<float> paramMinFreq       {  30.0f };
     std::atomic<float> paramMaxFreq       { 250.0f };
     std::atomic<bool>  paramMainLoudest   { false };
+    std::atomic<bool>  paramUseCentroid   { false };
 
     std::array<std::atomic<float>, numFundamentals> freqHz;
     std::array<std::atomic<float>, numFundamentals> levelDb;

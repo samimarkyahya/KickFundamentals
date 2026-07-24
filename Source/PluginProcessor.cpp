@@ -31,6 +31,12 @@ KickFundamentalsProcessor::createParameterLayout()
         ParameterID { kDrumId, 1 }, "Drum",
         StringArray { "Kick", "Snare", "Toms", "Cymbals" }, 0));
 
+    // Cymbals/Metal only: Ring = dominant sustained partial, Brightness = the
+    // spectral centroid (stable on short, dry hits).
+    layout.add (std::make_unique<AudioParameterChoice> (
+        ParameterID { kCymbalModeId, 1 }, "Cymbal Mode",
+        StringArray { "Ring", "Brightness" }, 0));
+
     return layout;
 }
 
@@ -40,9 +46,10 @@ KickFundamentalsProcessor::KickFundamentalsProcessor()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createParameterLayout())
 {
-    gateParam     = apvts.getRawParameterValue (kGateId);
-    responseParam = apvts.getRawParameterValue (kResponseId);
-    drumParam     = apvts.getRawParameterValue (kDrumId);
+    gateParam       = apvts.getRawParameterValue (kGateId);
+    responseParam   = apvts.getRawParameterValue (kResponseId);
+    drumParam       = apvts.getRawParameterValue (kDrumId);
+    cymbalModeParam = apvts.getRawParameterValue (kCymbalModeId);
 }
 
 // Per-drum analysis settings: search range (Hz) and whether the main readout
@@ -83,8 +90,9 @@ void KickFundamentalsProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     juce::ScopedNoDenormals noDenormals;
 
     // Push the current parameter values to the analyser (lock-free atomics).
-    if (gateParam     != nullptr) analyzer.setGateDb   (gateParam->load());
-    if (responseParam != nullptr) analyzer.setResponse (responseParam->load());
+    if (gateParam       != nullptr) analyzer.setGateDb     (gateParam->load());
+    if (responseParam   != nullptr) analyzer.setResponse   (responseParam->load());
+    if (cymbalModeParam != nullptr) analyzer.setUseCentroid (cymbalModeParam->load() > 0.5f);
 
     if (drumParam != nullptr)
     {

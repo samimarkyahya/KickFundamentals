@@ -213,9 +213,28 @@ void KickAnalyzer::analyseCurrentBlock()
         return { (float) binToFreq (bestBin + delta), smoothedMag[(size_t) bestBin] };
     };
 
-    if (paramMainLoudest.load())
+    if (paramMainLoudest.load() && paramUseCentroid.load())
     {
-        // --- Cymbals: sustained-dominant band with selection hysteresis ------
+        // --- Cymbals / Brightness: spectral centroid -------------------------
+        // Energy-weighted mean frequency over the range. It is an average, not a
+        // selection, so it stays stable even on short, dry, noisy hits that have
+        // no clear partial to lock onto. Bins near the noise floor are excluded.
+        double wsum = 0.0, fsum = 0.0;
+        for (int i = minBin; i <= maxBin; ++i)
+        {
+            const float m = smoothedMag[(size_t) i];
+            if (m < threshold)
+                continue;
+            const double w = (double) m * (double) m;
+            wsum += w;
+            fsum += w * binToFreq (i);
+        }
+        if (wsum > 0.0)
+            peaks.push_back ({ (float) (fsum / wsum), maxMag });
+    }
+    else if (paramMainLoudest.load())
+    {
+        // --- Cymbals / Ring: sustained-dominant band with hysteresis ---------
         updateBandEnergies (minFreqHz, maxFreqHz);
 
         // Main = refined peak inside the currently selected band.

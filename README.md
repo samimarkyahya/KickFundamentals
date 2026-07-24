@@ -42,10 +42,17 @@ mean by "the note of the kick".
 
 **Cymbals** have no low fundamental — the ear follows the loudest ring, but a hat
 is a dense cloud of fluctuating inharmonic partials, so a plain "loudest bin" pick
-hops around frame to frame. For the Cymbals tab the pitch instead comes from the
-**sustained-dominant band**: energy is accumulated into fixed log-spaced bands over
-time, and the readout only switches bands once a challenger stays clearly louder
-(selection hysteresis). Response sets how sticky that is.
+hops around frame to frame. The Cymbals/Metal tab therefore has a **MODE** switch:
+
+- **Ring** (default) — the pitch comes from the **sustained-dominant band**: energy
+  is accumulated into fixed log-spaced bands over time, and the readout only
+  switches bands once a challenger stays clearly louder (selection hysteresis).
+  Response sets how sticky that is. Best for cymbals and ringing metal.
+- **Brightness** — the pitch is the **spectral centroid** (energy-weighted mean
+  frequency). It is an average rather than a selection, so it stays steady even on
+  short, dry metallic hits that have no sustained ring to lock onto. There are no
+  partials in this mode (the centroid is a single value), and the hero reads
+  "BRIGHTNESS".
 
 ## Building
 

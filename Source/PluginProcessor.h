@@ -46,6 +46,7 @@ public:
     static constexpr const char* kKeyId      = "key";
     static constexpr const char* kScaleId    = "scale";
     static constexpr const char* kDrumId     = "drum";
+    static constexpr const char* kCymbalModeId = "cymbalmode"; // Ring / Brightness
 
     // Per-drum analysis settings.
     struct DrumConfig { float minHz; float maxHz; bool mainIsLoudest; };
@@ -58,9 +59,10 @@ private:
     KickAnalyzer analyzer;
 
     // Cached raw-parameter pointers for lock-free reads in processBlock.
-    std::atomic<float>* gateParam     = nullptr;
-    std::atomic<float>* responseParam = nullptr;
-    std::atomic<float>* drumParam     = nullptr;
+    std::atomic<float>* gateParam       = nullptr;
+    std::atomic<float>* responseParam   = nullptr;
+    std::atomic<float>* drumParam       = nullptr;
+    std::atomic<float>* cymbalModeParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KickFundamentalsProcessor)
 };

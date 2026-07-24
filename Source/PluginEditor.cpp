@@ -47,9 +47,10 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
                                                   BinaryData::logo_byline_pngSize);
 
     auto& apvts = processor.getAPVTS();
-    keyParam   = apvts.getRawParameterValue (KickFundamentalsProcessor::kKeyId);
-    scaleParam = apvts.getRawParameterValue (KickFundamentalsProcessor::kScaleId);
-    drumParam  = apvts.getRawParameterValue (KickFundamentalsProcessor::kDrumId);
+    keyParam        = apvts.getRawParameterValue (KickFundamentalsProcessor::kKeyId);
+    scaleParam      = apvts.getRawParameterValue (KickFundamentalsProcessor::kScaleId);
+    drumParam       = apvts.getRawParameterValue (KickFundamentalsProcessor::kDrumId);
+    cymbalModeParam = apvts.getRawParameterValue (KickFundamentalsProcessor::kCymbalModeId);
 
     auto styleKnob = [] (juce::Slider& s)
     {
@@ -85,6 +86,12 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     styleCombo (scaleBox);
     addAndMakeVisible (scaleBox);
 
+    // Cymbals/Metal only: how the pitch is read.
+    cymbalModeBox.addItem ("Ring", 1);
+    cymbalModeBox.addItem ("Brightness", 2);
+    styleCombo (cymbalModeBox);
+    addChildComponent (cymbalModeBox); // shown only on the Cymbals/Metal tab
+
     // --- Site link -----------------------------------------------------------
     siteLink.setColour (juce::HyperlinkButton::textColourId, juce::Colour (0xff7f8b9c));
     siteLink.setFont (juce::Font (13.0f, juce::Font::plain), false, juce::Justification::centred);
@@ -107,6 +114,9 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     scaleBox.setTooltip ("Major or minor - sets which notes count as in-key. "
                          "The plugin always aims for the closest one, so the drum "
                          "only moves as little as possible.");
+    cymbalModeBox.setTooltip ("Ring: the loudest sustained partial - best for "
+                              "cymbals & ringing metal. Brightness: the spectral "
+                              "centre - steadier on short, dry metallic hits.");
     gateSlider.setTooltip ("How loud a hit must be to read. Raise if it flickers "
                            "on noise; lower for quiet hits.");
     responseSlider.setTooltip ("Left = snappy. Right = rock-steady. "
@@ -115,8 +125,9 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     // --- Parameter attachments ----------------------------------------------
     gateAtt     = std::make_unique<SliderAtt> (apvts, KickFundamentalsProcessor::kGateId,     gateSlider);
     responseAtt = std::make_unique<SliderAtt> (apvts, KickFundamentalsProcessor::kResponseId, responseSlider);
-    keyAtt      = std::make_unique<ComboAtt>  (apvts, KickFundamentalsProcessor::kKeyId,      keyBox);
-    scaleAtt    = std::make_unique<ComboAtt>  (apvts, KickFundamentalsProcessor::kScaleId,    scaleBox);
+    keyAtt        = std::make_unique<ComboAtt> (apvts, KickFundamentalsProcessor::kKeyId,        keyBox);
+    scaleAtt      = std::make_unique<ComboAtt> (apvts, KickFundamentalsProcessor::kScaleId,      scaleBox);
+    cymbalModeAtt = std::make_unique<ComboAtt> (apvts, KickFundamentalsProcessor::kCymbalModeId, cymbalModeBox);
 
     applyDrumTheme (drumParam != nullptr ? (int) (drumParam->load() + 0.5f) : 0);
 
@@ -176,6 +187,14 @@ void KickFundamentalsEditor::timerCallback()
     // The Scale selector only makes sense once a Key is chosen.
     const int keyIdx = keyParam != nullptr ? (int) (keyParam->load() + 0.5f) : 0;
     scaleBox.setVisible (keyIdx > 0);
+
+    // Ring/Brightness applies only to the Cymbals/Metal tab. In Brightness mode
+    // there are no partials to show (the centroid is a single value).
+    const bool isCymbals  = (currentDrum == 3);
+    const bool brightness = isCymbals && cymbalModeParam != nullptr && cymbalModeParam->load() > 0.5f;
+    cymbalModeBox.setVisible (isCymbals);
+    row2Zone.setVisible (! brightness);
+    row3Zone.setVisible (! brightness);
 
     repaint();
 }
@@ -296,13 +315,16 @@ KickFundamentalsEditor::Layout KickFundamentalsEditor::computeLayout (juce::Rect
     b.removeFromTop (10);
 
     auto modeRow  = b.removeFromTop (46);
-    auto keyCol   = modeRow.removeFromLeft (150);
-    modeRow.removeFromLeft (18);
-    auto scaleCol = modeRow.removeFromLeft (150);
+    auto keyCol   = modeRow.removeFromLeft (140);
+    modeRow.removeFromLeft (14);
+    auto scaleCol = modeRow.removeFromLeft (140);
+    auto modeCol  = modeRow.removeFromRight (130); // Cymbals/Metal: Ring/Brightness
     L.keyLabel = keyCol.removeFromTop (16); keyCol.removeFromTop (2);
     L.keyBox   = keyCol.removeFromTop (26);
     L.scaleLabel = scaleCol.removeFromTop (16); scaleCol.removeFromTop (2);
     L.scaleBox   = scaleCol.removeFromTop (26);
+    L.modeLabel = modeCol.removeFromTop (16); modeCol.removeFromTop (2);
+    L.modeBox   = modeCol.removeFromTop (26);
     b.removeFromTop (10);
 
     L.row2 = b.removeFromTop (46);
@@ -325,6 +347,7 @@ void KickFundamentalsEditor::resized()
 
     keyBox.setBounds (L.keyBox);
     scaleBox.setBounds (L.scaleBox);
+    cymbalModeBox.setBounds (L.modeBox);
     siteLink.setBounds (L.footer);
 
     gateSlider.setBounds     (L.gate.withTrimmedTop (16));
@@ -399,6 +422,8 @@ void KickFundamentalsEditor::drawHero (juce::Graphics& g, juce::Rectangle<int> a
 
     const int keyIdx   = keyParam   != nullptr ? (int) (keyParam->load()   + 0.5f) : 0;
     const int scaleIdx = scaleParam != nullptr ? (int) (scaleParam->load() + 0.5f) : 0;
+    const bool brightness = (currentDrum == 3) && cymbalModeParam != nullptr
+                          && cymbalModeParam->load() > 0.5f;
 
     const float midi = hasSignal ? 69.0f + 12.0f * std::log2 (freq / 440.0f) : 0.0f;
     const Target target = hasSignal ? resolveTarget (midi, keyIdx, scaleIdx) : Target {};
@@ -425,7 +450,7 @@ void KickFundamentalsEditor::drawHero (juce::Graphics& g, juce::Rectangle<int> a
 
     // --- Label row: hero label (+ key context) on the left, Hz on the right ---
     auto labelRow = inner.removeFromTop (18);
-    juce::String heroLabel (heroLabelFor (currentDrum));
+    juce::String heroLabel (brightness ? "BRIGHTNESS" : heroLabelFor (currentDrum));
     if (keyIdx > 0)
         heroLabel += "  " + midDot + "  " + juce::String (pitchClassName (keyIdx - 1))
                    + (scaleIdx == 1 ? " minor" : " major");
@@ -606,16 +631,24 @@ void KickFundamentalsEditor::paint (juce::Graphics& g)
 
     drawHero (g, L.hero);
 
-    // KEY / SCALE selector labels (uppercase, above each dropdown).
-    const int keyIdx = keyParam != nullptr ? (int) (keyParam->load() + 0.5f) : 0;
+    // KEY / SCALE / MODE selector labels (uppercase, above each dropdown).
+    const int  keyIdx     = keyParam != nullptr ? (int) (keyParam->load() + 0.5f) : 0;
+    const bool isCymbals  = (currentDrum == 3);
+    const bool brightness = isCymbals && cymbalModeParam != nullptr && cymbalModeParam->load() > 0.5f;
     g.setColour (juce::Colour (0xff7f8b9c));
     g.setFont (juce::Font (12.0f, juce::Font::bold));
     g.drawText ("KEY", L.keyLabel, juce::Justification::centredLeft);
     if (keyIdx > 0) // Scale only applies once a key is chosen.
         g.drawText ("SCALE", L.scaleLabel, juce::Justification::centredLeft);
+    if (isCymbals)
+        g.drawText ("MODE", L.modeLabel, juce::Justification::centredLeft);
 
-    drawSmallRow (g, L.row2, partialTags[0], 1);
-    drawSmallRow (g, L.row3, partialTags[1], 2);
+    // Brightness is a single centroid value — no partials to show.
+    if (! brightness)
+    {
+        drawSmallRow (g, L.row2, partialTags[0], 1);
+        drawSmallRow (g, L.row3, partialTags[1], 2);
+    }
 
     drawKnobLabel (g, L.gate,     "GATE");
     drawKnobLabel (g, L.response, "RESPONSE");
