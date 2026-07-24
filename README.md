@@ -13,7 +13,7 @@ recolours the interface and switches the analysis to that drum's frequency range
 | Kick | blue | 30–250 Hz | lowest fundamental |
 | Toms | green | 70–350 Hz | lowest fundamental |
 | Snare | red | 120–500 Hz | lowest fundamental |
-| Cymbals | light grey | 500–8000 Hz | **loudest** ring partial |
+| Cymbals | light grey | 1000–15000 Hz | **loudest** ring partial |
 
 Pitched drums (kick/toms/snare) read the lowest fundamental as the main note.
 Cymbals have no low fundamental, so the ear follows the loudest ring — that tab

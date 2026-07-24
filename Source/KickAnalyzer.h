@@ -55,8 +55,14 @@ public:
     float getLevelDb (int index) const noexcept;
 
     // --- Runtime parameters (set from processBlock) --------------------------
-    /** Noise-gate / onset threshold in dBFS. */
-    void setGateDb (float db) noexcept { paramGateDb.store (db); }
+    /** Noise-gate threshold in dBFS. Also derives the Body-only onset detector's
+        arm/reset thresholds (well above the gate so it re-triggers on every hit). */
+    void setGateDb (float db) noexcept
+    {
+        paramGateDb.store (db);
+        paramOnsetHigh.store (juce::Decibels::decibelsToGain (db + 25.0f)); // arm
+        paramOnsetLow .store (juce::Decibels::decibelsToGain (db + 13.0f)); // reset (hysteresis)
+    }
 
     /** 0 = fast/responsive, 1 = steady/rock-solid. Drives both smoothers. */
     void setResponse (float amount) noexcept
@@ -83,7 +89,7 @@ public:
 
 private:
     void analyseCurrentBlock();
-    bool stageBlockFrom (const std::array<float, fftSize>& src, int startIndex) noexcept;
+    bool stageBlockFrom (const std::array<float, fftSize>& src, int startIndex, bool fromBody) noexcept;
 
     double sampleRateHz = 44100.0;
 
@@ -110,6 +116,7 @@ private:
 
     std::array<float, fftSize * 2>   fftData {};
     std::atomic<bool> nextBlockReady { false };
+    bool blockIsBody = false;   // did the staged block come from a body capture?
 
     // Message-thread analysis state.
     std::array<float, fftSize / 2 + 1>  smoothedMag {};   // spectral EMA
@@ -127,6 +134,8 @@ private:
     std::atomic<float> paramMinFreq       {  30.0f };
     std::atomic<float> paramMaxFreq       { 250.0f };
     std::atomic<bool>  paramMainLoudest   { false };
+    std::atomic<float> paramOnsetHigh     { 0.0316f }; // ~-30 dB (arm)
+    std::atomic<float> paramOnsetLow      { 0.0079f }; // ~-42 dB (reset)
 
     std::array<std::atomic<float>, numFundamentals> freqHz;
     std::array<std::atomic<float>, numFundamentals> levelDb;

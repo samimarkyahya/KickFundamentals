@@ -30,7 +30,7 @@ juce::String KickFundamentalsEditor::rangeTextFor (int d)
     {
         case 1:  return "70 - 350 Hz";
         case 2:  return "120 - 500 Hz";
-        case 3:  return "500 - 8000 Hz";
+        case 3:  return "1000 - 15000 Hz";
         default: return "30 - 250 Hz";
     }
 }

@@ -52,7 +52,7 @@ KickFundamentalsProcessor::configForDrum (int drum) noexcept
     {
         case 1:  return { 70.0f,  350.0f,  false }; // Toms
         case 2:  return { 120.0f, 500.0f,  false }; // Snare
-        case 3:  return { 500.0f, 8000.0f, true  }; // Cymbals (main = loudest ring)
+        case 3:  return { 1000.0f, 15000.0f, true }; // Cymbals (main = loudest ring)
         default: return { 30.0f,  250.0f,  false }; // Kick
     }
 }

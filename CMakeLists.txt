@@ -37,8 +37,8 @@ set(KF_PLUGIN_ARGS
     NEEDS_MIDI_OUTPUT         FALSE
     IS_MIDI_EFFECT            FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    PLUGIN_MANUFACTURER_CODE  Evof
-    PLUGIN_CODE               Kfnd
+    PLUGIN_MANUFACTURER_CODE  Fdhd
+    PLUGIN_CODE               Drmf
     # AU is macOS-only (built on a Mac); it is ignored on other platforms.
     FORMATS                   VST3 AU Standalone
     PRODUCT_NAME              "Drum Fundamentals")

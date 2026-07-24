@@ -28,15 +28,15 @@ void KickAnalyzer::prepare (double sampleRate)
     envDecay          = (float) std::exp (-1.0 / (0.050 * sampleRateHz)); // ~50 ms release
     wasOverThreshold  = false;
     samplesSinceOnset = 1 << 30;
-    minOnsetGap       = (int) (0.100 * sampleRateHz);  // ignore re-triggers for 100 ms
-    bodyDelaySamples  = (int) (0.055 * sampleRateHz);  // skip the first ~55 ms (punch/glide)
+    minOnsetGap       = (int) (0.080 * sampleRateHz);  // ignore re-triggers for 80 ms
+    bodyDelaySamples  = (int) (0.030 * sampleRateHz);  // skip the first ~30 ms (punch/glide)
     bodyArmed         = false;
     bodyDelayCounter  = 0;
     captureIndex      = 0;
     captureBuf.fill (0.0f);
 }
 
-bool KickAnalyzer::stageBlockFrom (const std::array<float, fftSize>& src, int startIndex) noexcept
+bool KickAnalyzer::stageBlockFrom (const std::array<float, fftSize>& src, int startIndex, bool fromBody) noexcept
 {
     // Copy fftSize samples starting (circularly) at startIndex into fftData,
     // but only if the message thread has consumed the previous block.
@@ -47,6 +47,7 @@ bool KickAnalyzer::stageBlockFrom (const std::array<float, fftSize>& src, int st
         fftData[(size_t) i] = src[(size_t) ((startIndex + i) % fftSize)];
 
     std::fill (fftData.begin() + fftSize, fftData.end(), 0.0f);
+    blockIsBody = fromBody;              // written before the release store below
     nextBlockReady.store (true);
     return true;
 }
@@ -55,15 +56,19 @@ void KickAnalyzer::pushSample (float sample) noexcept
 {
     const bool bodyOnly = paramBodyOnly.load();
 
-    // --- Onset detection (peak-follower with release) ------------------------
+    // --- Onset detection (peak-follower with hysteresis) ---------------------
+    // A rising edge past the (high) arm threshold fires an onset; re-arming only
+    // happens once the envelope falls back below the (low) reset threshold, so
+    // every hit triggers exactly once and the detector never latches.
     const float a = std::abs (sample);
     envelope = juce::jmax (a, envelope * envDecay);
 
-    const float onsetThreshold = juce::Decibels::decibelsToGain (paramGateDb.load());
-    const bool  over = envelope > onsetThreshold;
+    if (envelope < paramOnsetLow.load())
+        wasOverThreshold = false;
 
-    if (over && ! wasOverThreshold && samplesSinceOnset > minOnsetGap)
+    if (envelope > paramOnsetHigh.load() && ! wasOverThreshold && samplesSinceOnset > minOnsetGap)
     {
+        wasOverThreshold  = true;
         samplesSinceOnset = 0;
         if (bodyOnly && ! bodyArmed)
         {
@@ -72,7 +77,6 @@ void KickAnalyzer::pushSample (float sample) noexcept
             captureIndex     = 0;
         }
     }
-    wasOverThreshold = over;
     if (samplesSinceOnset < (1 << 30)) ++samplesSinceOnset;
 
     if (bodyOnly)
@@ -89,7 +93,7 @@ void KickAnalyzer::pushSample (float sample) noexcept
                 captureBuf[(size_t) captureIndex++] = sample;
                 if (captureIndex >= fftSize)
                 {
-                    stageBlockFrom (captureBuf, 0);
+                    stageBlockFrom (captureBuf, 0, true);
                     bodyArmed    = false;
                     captureIndex = 0;
                 }
@@ -106,7 +110,7 @@ void KickAnalyzer::pushSample (float sample) noexcept
         {
             hopCounter = 0;
             // writePos points at the oldest sample: read the window in order.
-            stageBlockFrom (ring, writePos);
+            stageBlockFrom (ring, writePos, false);
         }
     }
 }
@@ -129,8 +133,12 @@ void KickAnalyzer::analyseCurrentBlock()
 
     const float rmsDb = juce::Decibels::gainToDecibels ((float) std::sqrt (sumSq / (double) fftSize));
 
-    if (rmsDb < paramGateDb.load())
-        return; // too quiet — keep displaying the previous kick's notes
+    // The continuous (whole-hit) path gates on level to hold between hits. A
+    // body capture is only staged right after a detected onset, so it is always
+    // a real hit — skip the gate there (short/quiet drums would fail an RMS test
+    // taken over the whole window).
+    if (! blockIsBody && rmsDb < paramGateDb.load())
+        return; // too quiet — keep displaying the previous reading
 
     const float magSmoothing  = paramMagSmoothing.load();
     const float freqSmoothing = paramFreqSmoothing.load();
