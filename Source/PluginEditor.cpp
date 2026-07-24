@@ -18,17 +18,17 @@ juce::Colour KickFundamentalsEditor::drumAccent (int d)
 }
 const char* KickFundamentalsEditor::drumTabName (int d)
 {
-    switch (d) { case 1: return "TOMS"; case 2: return "SNARE"; case 3: return "CYMBALS"; default: return "KICK"; }
+    switch (d) { case 1: return "TOMS / PERC"; case 2: return "SNARE"; case 3: return "CYMBALS"; default: return "KICK"; }
 }
 const char* KickFundamentalsEditor::heroLabelFor (int d)
 {
-    switch (d) { case 1: return "TOM NOTE"; case 2: return "SNARE NOTE"; case 3: return "CYMBAL NOTE"; default: return "KICK NOTE"; }
+    switch (d) { case 1: return "PERC NOTE"; case 2: return "SNARE NOTE"; case 3: return "CYMBAL NOTE"; default: return "KICK NOTE"; }
 }
 juce::String KickFundamentalsEditor::rangeTextFor (int d)
 {
     switch (d)
     {
-        case 1:  return "70 - 350 Hz";
+        case 1:  return "60 - 500 Hz";
         case 2:  return "120 - 500 Hz";
         case 3:  return "1000 - 15000 Hz";
         default: return "30 - 250 Hz";
@@ -233,18 +233,26 @@ namespace
         static const int minor[7] = { 0, 2, 3, 5, 7, 8, 10 }; // natural minor
         const int* scale = (scaleIdx == 1) ? minor : major;
 
-        // Nearest occurrence (any octave) of any scale note — the smallest move.
-        float bestDist = 1.0e9f;
+        // Not all in-key notes are equally good landing spots. Strong, stable
+        // degrees (root, then 5th, then 3rd) get a "pull" in cents so a near-tie
+        // resolves to the musically solid note instead of a passing tone. This
+        // only tips close calls — a genuinely closer note still wins, and a far
+        // root never drags the drum across the octave. The root leans hardest.
+        static const float bonus[7] = { 90.0f, 0.0f, 30.0f, 0.0f, 45.0f, 0.0f, 0.0f };
+
+        // Pick the smallest weighted move: cents distance minus the degree bonus.
+        float bestScore = 1.0e9f;
         for (int s = 0; s < 7; ++s)
         {
-            const int   pc = (keyPc + scale[s]) % 12;
-            const float m  = nearestMidiOfPitchClass (midi, pc);
-            const float d  = std::abs (midi - m);
-            if (d < bestDist)
+            const int   pc    = (keyPc + scale[s]) % 12;
+            const float m     = nearestMidiOfPitchClass (midi, pc);
+            const float dist  = std::abs (midi - m) * 100.0f; // cents
+            const float score = dist - bonus[s];
+            if (score < bestScore)
             {
-                bestDist = d;
-                t.midi   = m;
-                t.pc     = pc;
+                bestScore = score;
+                t.midi    = m;
+                t.pc      = pc;
             }
         }
         return t;
