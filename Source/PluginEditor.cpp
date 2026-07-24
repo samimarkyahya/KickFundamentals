@@ -2,6 +2,8 @@
 #include "BinaryData.h"
 
 #include <cmath>
+#include <cstdlib>
+#include <limits>
 
 constexpr const char* KickFundamentalsEditor::partialTags[];
 
@@ -24,14 +26,15 @@ const char* KickFundamentalsEditor::heroLabelFor (int d)
 {
     switch (d) { case 1: return "SNARE NOTE"; case 2: return "PERC NOTE"; case 3: return "CYMBAL NOTE"; default: return "KICK NOTE"; }
 }
-juce::String KickFundamentalsEditor::rangeTextFor (int d)
+juce::String KickFundamentalsEditor::tabDescriptor (int d)
 {
     switch (d)
     {
-        case 1:  return "120 - 500 Hz";
-        case 2:  return "60 - 500 Hz";
-        case 3:  return "1000 - 15000 Hz";
-        default: return "30 - 250 Hz";
+        case 1:  return "For snares, claps & rimshots (120-500 Hz)";
+        case 2:  return "For toms, congas & other pitched percussion (60-500 Hz)";
+        case 3:  return "For cymbals & everything with a metal ringing. Attention: "
+                        "short, dry hits are hard to read! (1000-15000 Hz)";
+        default: return "For kicks & very low toms/timpani (30-250 Hz)";
     }
 }
 
@@ -117,7 +120,7 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
 
     applyDrumTheme (drumParam != nullptr ? (int) (drumParam->load() + 0.5f) : 0);
 
-    setSize (470, 630);
+    setSize (470, 646);
     startTimerHz (30);
 }
 
@@ -144,8 +147,15 @@ void KickFundamentalsEditor::mouseDown (const juce::MouseEvent& e)
     if (! L.tabs.contains (e.getPosition()))
         return;
 
-    int idx = (e.x - L.tabs.getX()) * numDrums / juce::jmax (1, L.tabs.getWidth());
-    idx = juce::jlimit (0, numDrums - 1, idx);
+    // Pick the tab whose label centre is nearest the click, so the whole bar is
+    // clickable (the gaps map to the closer neighbour) and it matches the paint.
+    const auto rects = computeTabRects (L.tabs);
+    int idx = 0, bestDist = std::numeric_limits<int>::max();
+    for (int i = 0; i < numDrums; ++i)
+    {
+        const int d = std::abs (e.x - rects[(size_t) i].getCentreX());
+        if (d < bestDist) { bestDist = d; idx = i; }
+    }
 
     if (auto* param = processor.getAPVTS().getParameter (KickFundamentalsProcessor::kDrumId))
         param->setValueNotifyingHost (param->convertTo0to1 ((float) idx));
@@ -278,9 +288,9 @@ KickFundamentalsEditor::Layout KickFundamentalsEditor::computeLayout (juce::Rect
     b.removeFromTop (12);
 
     L.tabs = b.removeFromTop (34);
-    b.removeFromTop (2);
-    L.range = b.removeFromTop (18);
-    b.removeFromTop (10);
+    b.removeFromTop (4);
+    L.range = b.removeFromTop (32); // two lines (long Cymbals/Metal descriptor)
+    b.removeFromTop (8);
 
     L.hero = b.removeFromTop (150);
     b.removeFromTop (10);
@@ -325,24 +335,54 @@ void KickFundamentalsEditor::resized()
     row3Zone.setBounds (L.row3);
 }
 
-void KickFundamentalsEditor::drawTabs (juce::Graphics& g, juce::Rectangle<int> area)
+std::array<juce::Rectangle<int>, (size_t) KickFundamentalsEditor::numDrums>
+KickFundamentalsEditor::computeTabRects (juce::Rectangle<int> area) const
 {
-    const int tw = area.getWidth() / numDrums;
+    const juce::Font f (12.0f, juce::Font::bold);
+
+    // Measure each label (GlyphArrangement, not the deprecated getStringWidth).
+    std::array<int, (size_t) numDrums> w {};
+    int total = 0;
     for (int i = 0; i < numDrums; ++i)
     {
-        auto r = area.withX (area.getX() + i * tw)
-                     .withWidth (i == numDrums - 1 ? area.getRight() - (area.getX() + i * tw) : tw);
+        juce::GlyphArrangement ga;
+        ga.addLineOfText (f, drumTabName (i), 0.0f, 0.0f);
+        w[(size_t) i] = (int) std::ceil (ga.getBoundingBox (0, -1, true).getWidth());
+        total += w[(size_t) i];
+    }
+
+    // Distribute the leftover width as equal gaps, including even end margins,
+    // so the labels look evenly spaced regardless of their differing widths.
+    const int gap = juce::jmax (6, (area.getWidth() - total) / (numDrums + 1));
+
+    std::array<juce::Rectangle<int>, (size_t) numDrums> rects;
+    int x = area.getX() + gap;
+    for (int i = 0; i < numDrums; ++i)
+    {
+        rects[(size_t) i] = area.withX (x).withWidth (w[(size_t) i]);
+        x += w[(size_t) i] + gap;
+    }
+    return rects;
+}
+
+void KickFundamentalsEditor::drawTabs (juce::Graphics& g, juce::Rectangle<int> area)
+{
+    const auto rects = computeTabRects (area);
+    g.setFont (juce::Font (12.0f, juce::Font::bold));
+
+    for (int i = 0; i < numDrums; ++i)
+    {
+        const auto r = rects[(size_t) i];
         const bool active = (i == currentDrum);
 
         g.setColour (active ? accent : juce::Colour (0xff6c7788));
-        g.setFont (juce::Font (12.0f, juce::Font::bold));
         g.drawText (drumTabName (i), r.withTrimmedBottom (6), juce::Justification::centred);
 
         if (active)
         {
             g.setColour (accent);
-            g.fillRoundedRectangle ((float) (r.getX() + 10), (float) (r.getBottom() - 3),
-                                    (float) (r.getWidth() - 20), 2.5f, 1.5f);
+            g.fillRoundedRectangle ((float) r.getX(), (float) (r.getBottom() - 3),
+                                    (float) r.getWidth(), 2.5f, 1.5f);
         }
     }
     g.setColour (juce::Colour (0xff2b323c));
@@ -550,13 +590,19 @@ void KickFundamentalsEditor::paint (juce::Graphics& g)
 
     drawTabs (g, L.tabs);
 
-    // Frequency range for the active drum.
-    g.setColour (juce::Colour (0xff7f8b9c));
-    g.setFont (juce::Font (11.0f, juce::Font::bold));
-    g.drawText ("FUNDAMENTAL RANGE", L.range, juce::Justification::centredLeft);
-    g.setColour (accent);
-    g.setFont (juce::Font (13.0f, juce::Font::bold));
-    g.drawText (rangeTextFor (currentDrum), L.range, juce::Justification::centredRight);
+    // What the active tab is best for, with its range in brackets. A TextLayout
+    // wraps to the width at a fixed size (short descriptors stay one line; the
+    // long Cymbals/Metal note wraps to two — all at the same readable size).
+    {
+        juce::AttributedString as;
+        as.append (tabDescriptor (currentDrum), juce::Font (12.0f), juce::Colour (0xff9aa4b0));
+        as.setJustification (juce::Justification::topLeft);
+        juce::TextLayout tl;
+        tl.createLayout (as, (float) L.range.getWidth());
+        auto box = L.range.toFloat();
+        box.setY (box.getY() + juce::jmax (0.0f, (box.getHeight() - tl.getHeight()) * 0.5f));
+        tl.draw (g, box);
+    }
 
     drawHero (g, L.hero);
 

@@ -3,6 +3,8 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 
+#include <array>
+
 class KickFundamentalsEditor : public juce::AudioProcessorEditor,
                                private juce::Timer
 {
@@ -25,8 +27,12 @@ private:
     static juce::Colour drumAccent  (int d);
     static const char*  drumTabName (int d);
     static const char*  heroLabelFor(int d);
-    static juce::String rangeTextFor(int d);
+    static juce::String tabDescriptor (int d); // what the tab is best for (+ range)
     void applyDrumTheme (int d);
+
+    // Tab label rectangles, spaced by text width with even gaps (shared by the
+    // tab painter and the click hit-test so they always agree).
+    std::array<juce::Rectangle<int>, (size_t) numDrums> computeTabRects (juce::Rectangle<int> area) const;
 
     struct Layout
     {
