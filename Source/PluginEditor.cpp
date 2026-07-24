@@ -38,6 +38,8 @@ juce::String KickFundamentalsEditor::rangeTextFor (int d)
 KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     : AudioProcessorEditor (&p), processor (p)
 {
+    logoTitle  = juce::ImageCache::getFromMemory (BinaryData::logo_title_png,
+                                                  BinaryData::logo_title_pngSize);
     logoByline = juce::ImageCache::getFromMemory (BinaryData::logo_byline_png,
                                                   BinaryData::logo_byline_pngSize);
 
@@ -414,10 +416,11 @@ void KickFundamentalsEditor::paint (juce::Graphics& g)
 
     const auto L = computeLayout (getLocalBounds());
 
-    // Title wordmark (rendered as text for now) + byline logo.
-    g.setColour (juce::Colours::white);
-    g.setFont (juce::Font (25.0f, juce::Font::bold));
-    g.drawText ("DRUM FUNDAMENTALS", L.title, juce::Justification::centred);
+    // Title + byline logos.
+    if (logoTitle.isValid())
+        g.drawImageWithin (logoTitle, L.title.getX(), L.title.getY(),
+                           L.title.getWidth(), L.title.getHeight(),
+                           juce::RectanglePlacement::centred);
     if (logoByline.isValid())
         g.drawImageWithin (logoByline, L.byline.getX(), L.byline.getY(),
                            L.byline.getWidth(), L.byline.getHeight(),

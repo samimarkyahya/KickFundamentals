@@ -56,7 +56,7 @@ private:
 
     KickFundamentalsProcessor& processor;
 
-    juce::Image logoByline;
+    juce::Image logoTitle, logoByline;
 
     juce::Slider   gateSlider, responseSlider;
     juce::ComboBox targetBox;
