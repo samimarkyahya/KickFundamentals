@@ -3,6 +3,9 @@ build/
 cmake-build-*/
 out/
 
+# Packaged plugin deliverables (sent to the user, not committed)
+*.zip
+
 # JUCE fetched via CMake FetchContent
 _deps/
 
