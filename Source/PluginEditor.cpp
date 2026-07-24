@@ -237,8 +237,15 @@ namespace
         // degrees (root, then 5th, then 3rd) get a "pull" in cents so a near-tie
         // resolves to the musically solid note instead of a passing tone. This
         // only tips close calls — a genuinely closer note still wins, and a far
-        // root never drags the drum across the octave. The root leans hardest.
-        static const float bonus[7] = { 90.0f, 0.0f, 30.0f, 0.0f, 45.0f, 0.0f, 0.0f };
+        // root never drags the drum across the octave.
+        //
+        // The root's pull is a full semitone (120c) so that a drum within a
+        // semitone of the root always tunes UP to the root rather than parking
+        // on the major 7th (the leading tone) sitting right below it — that note
+        // is in the scale but is the least stable place to rest. Only the major
+        // 7th is close enough to be affected; the 2nd above and the minor 7th
+        // below are a whole step away and stay put.
+        static const float bonus[7] = { 120.0f, 0.0f, 30.0f, 0.0f, 45.0f, 0.0f, 0.0f };
 
         // Pick the smallest weighted move: cents distance minus the degree bonus.
         float bestScore = 1.0e9f;
