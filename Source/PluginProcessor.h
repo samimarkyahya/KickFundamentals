@@ -43,8 +43,8 @@ public:
     // Parameter IDs (shared with the editor).
     static constexpr const char* kGateId     = "gate";
     static constexpr const char* kResponseId = "response";
-    static constexpr const char* kTargetId   = "target";
-    static constexpr const char* kBodyOnlyId = "bodyonly";
+    static constexpr const char* kKeyId      = "key";
+    static constexpr const char* kIntervalId = "interval";
     static constexpr const char* kDrumId     = "drum";
 
     // Per-drum analysis settings.
@@ -60,7 +60,6 @@ private:
     // Cached raw-parameter pointers for lock-free reads in processBlock.
     std::atomic<float>* gateParam     = nullptr;
     std::atomic<float>* responseParam = nullptr;
-    std::atomic<float>* bodyOnlyParam = nullptr;
     std::atomic<float>* drumParam     = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KickFundamentalsProcessor)

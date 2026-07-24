@@ -44,8 +44,9 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
                                                   BinaryData::logo_byline_pngSize);
 
     auto& apvts = processor.getAPVTS();
-    targetParam = apvts.getRawParameterValue (KickFundamentalsProcessor::kTargetId);
-    drumParam   = apvts.getRawParameterValue (KickFundamentalsProcessor::kDrumId);
+    keyParam      = apvts.getRawParameterValue (KickFundamentalsProcessor::kKeyId);
+    intervalParam = apvts.getRawParameterValue (KickFundamentalsProcessor::kIntervalId);
+    drumParam     = apvts.getRawParameterValue (KickFundamentalsProcessor::kDrumId);
 
     auto styleKnob = [] (juce::Slider& s)
     {
@@ -60,21 +61,30 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     addAndMakeVisible (gateSlider);
     addAndMakeVisible (responseSlider);
 
-    // --- Target-note selector ------------------------------------------------
-    static const juce::StringArray items { "Auto", "C", "C#", "D", "D#", "E", "F",
-                                           "F#", "G", "G#", "A", "A#", "B" };
-    for (int i = 0; i < items.size(); ++i)
-        targetBox.addItem (items[i], i + 1);
-    targetBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff20242c));
-    targetBox.setColour (juce::ComboBox::textColourId,       juce::Colours::white);
-    targetBox.setColour (juce::ComboBox::outlineColourId,    juce::Colour (0xff3a424e));
-    targetBox.setColour (juce::ComboBox::arrowColourId,      juce::Colour (0xff9aa4b0));
-    addAndMakeVisible (targetBox);
+    // --- Key + Interval selectors --------------------------------------------
+    auto styleCombo = [] (juce::ComboBox& c)
+    {
+        c.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff20242c));
+        c.setColour (juce::ComboBox::textColourId,       juce::Colours::white);
+        c.setColour (juce::ComboBox::outlineColourId,    juce::Colour (0xff3a424e));
+        c.setColour (juce::ComboBox::arrowColourId,      juce::Colour (0xff9aa4b0));
+    };
 
-    // --- Body-only toggle ----------------------------------------------------
-    bodyToggle.setColour (juce::ToggleButton::textColourId, juce::Colour (0xffb7c0cc));
-    bodyToggle.setColour (juce::ToggleButton::tickDisabledColourId, juce::Colour (0xff3a424e));
-    addAndMakeVisible (bodyToggle);
+    static const juce::StringArray keyItems { "Auto", "C", "C#", "D", "D#", "E", "F",
+                                              "F#", "G", "G#", "A", "A#", "B" };
+    for (int i = 0; i < keyItems.size(); ++i)
+        keyBox.addItem (keyItems[i], i + 1);
+    styleCombo (keyBox);
+    addAndMakeVisible (keyBox);
+
+    // Interval quality (♭3/♭7 = minor, 3/7 = major) via CharPointer_UTF8.
+    const juce::String flat3 (juce::CharPointer_UTF8 ("\xe2\x99\xad" "3"));
+    const juce::String flat7 (juce::CharPointer_UTF8 ("\xe2\x99\xad" "7"));
+    const juce::StringArray intervalItems { "Auto", "Root", flat3, "3", "5", flat7, "7" };
+    for (int i = 0; i < intervalItems.size(); ++i)
+        intervalBox.addItem (intervalItems[i], i + 1);
+    styleCombo (intervalBox);
+    addAndMakeVisible (intervalBox);
 
     // --- Site link -----------------------------------------------------------
     siteLink.setColour (juce::HyperlinkButton::textColourId, juce::Colour (0xff7f8b9c));
@@ -92,10 +102,12 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     addAndMakeVisible (row2Zone);
     addAndMakeVisible (row3Zone);
 
-    targetBox.setTooltip ("\"Auto\" = nearest note. Or pick your song's key "
-                          "to see how far off the drum is.");
-    bodyToggle.setTooltip ("Ignores the attack, reads just the sustained body. "
-                           "Good for drums that \"pitch down.\"");
+    keyBox.setTooltip ("Pick your song's key. The plugin then shows which way to "
+                       "tune the drum, and how far, to fit it. Leave on Auto to "
+                       "just read the nearest note.");
+    intervalBox.setTooltip ("Which note of the key to aim for. Auto picks the "
+                            "closest safe one for you. Or pin a specific one: "
+                            "Root, 3rd, 5th, 7th.");
     gateSlider.setTooltip ("How loud a hit must be to read. Raise if it flickers "
                            "on noise; lower for quiet hits.");
     responseSlider.setTooltip ("Left = snappy. Right = rock-steady. "
@@ -104,12 +116,12 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     // --- Parameter attachments ----------------------------------------------
     gateAtt     = std::make_unique<SliderAtt> (apvts, KickFundamentalsProcessor::kGateId,     gateSlider);
     responseAtt = std::make_unique<SliderAtt> (apvts, KickFundamentalsProcessor::kResponseId, responseSlider);
-    targetAtt   = std::make_unique<ComboAtt>  (apvts, KickFundamentalsProcessor::kTargetId,   targetBox);
-    bodyAtt     = std::make_unique<ButtonAtt> (apvts, KickFundamentalsProcessor::kBodyOnlyId, bodyToggle);
+    keyAtt      = std::make_unique<ComboAtt>  (apvts, KickFundamentalsProcessor::kKeyId,      keyBox);
+    intervalAtt = std::make_unique<ComboAtt>  (apvts, KickFundamentalsProcessor::kIntervalId, intervalBox);
 
     applyDrumTheme (drumParam != nullptr ? (int) (drumParam->load() + 0.5f) : 0);
 
-    setSize (470, 610);
+    setSize (470, 630);
     startTimerHz (30);
 }
 
@@ -127,7 +139,6 @@ void KickFundamentalsEditor::applyDrumTheme (int d)
     gateSlider.setColour     (juce::Slider::thumbColourId,            pointer);
     responseSlider.setColour (juce::Slider::rotarySliderFillColourId, accent);
     responseSlider.setColour (juce::Slider::thumbColourId,            pointer);
-    bodyToggle.setColour     (juce::ToggleButton::tickColourId,       accent);
     repaint();
 }
 
@@ -156,6 +167,10 @@ void KickFundamentalsEditor::timerCallback()
             applyDrumTheme (d);
     }
 
+    // The Interval selector only makes sense once a Key is chosen.
+    const int keyIdx = keyParam != nullptr ? (int) (keyParam->load() + 0.5f) : 0;
+    intervalBox.setVisible (keyIdx > 0);
+
     repaint();
 }
 
@@ -178,14 +193,78 @@ juce::String KickFundamentalsEditor::freqToNoteName (float freqHz, int& centsOut
     return juce::String (names[note]) + juce::String (octave);
 }
 
-float KickFundamentalsEditor::centsToPitchClass (float freqHz, int pitchClass)
+namespace
 {
-    if (freqHz <= 0.0f)
-        return 0.0f;
+    const char* pitchClassName (int pc)
+    {
+        static const char* names[] =
+            { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+        return names[((pc % 12) + 12) % 12];
+    }
 
-    const float midi = 69.0f + 12.0f * std::log2 (freqHz / 440.0f);
-    const float base = std::round ((midi - (float) pitchClass) / 12.0f) * 12.0f + (float) pitchClass;
-    return (midi - base) * 100.0f; // signed cents (can exceed +/-50 up to +/-600)
+    // The MIDI note (any octave) of pitch-class pc nearest to `midi`.
+    float nearestMidiOfPitchClass (float midi, int pc)
+    {
+        return std::round ((midi - (float) pc) / 12.0f) * 12.0f + (float) pc;
+    }
+
+    // Where the drum should be tuned, given the Key (0=Auto,1=C..12=B) and
+    // Interval (0=Auto,1=Root,2=♭3,3=3,4=5,5=♭7,6=7) selections.
+    struct Target
+    {
+        float midi = 0.0f;      // MIDI note to aim for (nearest octave)
+        int   pc   = 0;         // its pitch class (0=C..11=B)
+        const char* quality = nullptr; // interval label ("root","5th",...) or null in Auto key
+    };
+
+    Target resolveTarget (float midi, int keyIdx, int intervalIdx)
+    {
+        Target t;
+
+        // Auto key: aim for the nearest chromatic note.
+        if (keyIdx <= 0)
+        {
+            const int nearest = juce::roundToInt (midi);
+            t.midi    = (float) nearest;
+            t.pc      = ((nearest % 12) + 12) % 12;
+            t.quality = nullptr;
+            return t;
+        }
+
+        const int keyPc = keyIdx - 1;
+
+        // Interval = Auto: pick the nearer of the Root or the 5th (always safe).
+        if (intervalIdx <= 0)
+        {
+            const int   candPc[2]   = { keyPc, (keyPc + 7) % 12 };
+            const char* candName[2] = { "root", "5th" };
+
+            float bestDist = 1.0e9f;
+            for (int i = 0; i < 2; ++i)
+            {
+                const float m = nearestMidiOfPitchClass (midi, candPc[i]);
+                const float d = std::abs (midi - m);
+                if (d < bestDist)
+                {
+                    bestDist  = d;
+                    t.midi    = m;
+                    t.pc      = candPc[i];
+                    t.quality = candName[i];
+                }
+            }
+            return t;
+        }
+
+        // A specific chord tone: semitone offset from the key root.
+        static const int   offset[6] = { 0, 3, 4, 7, 10, 11 };
+        static const char* label[6]  = { "root", "\xe2\x99\xad" "3", "3rd", "5th", "\xe2\x99\xad" "7", "7th" };
+        const int i = juce::jlimit (0, 5, intervalIdx - 1);
+
+        t.pc      = (keyPc + offset[i]) % 12;
+        t.midi    = nearestMidiOfPitchClass (midi, t.pc);
+        t.quality = label[i];
+        return t;
+    }
 }
 
 KickFundamentalsEditor::Layout KickFundamentalsEditor::computeLayout (juce::Rectangle<int> bounds)
@@ -207,10 +286,14 @@ KickFundamentalsEditor::Layout KickFundamentalsEditor::computeLayout (juce::Rect
     L.hero = b.removeFromTop (150);
     b.removeFromTop (10);
 
-    auto modeRow = b.removeFromTop (30);
-    L.targetLabel = modeRow.removeFromLeft (66);
-    L.targetBox   = modeRow.removeFromLeft (96).reduced (0, 2);
-    L.bodyToggle  = modeRow.removeFromRight (120);
+    auto modeRow = b.removeFromTop (46);
+    auto keyCol  = modeRow.removeFromLeft (150);
+    modeRow.removeFromLeft (18);
+    auto intCol  = modeRow.removeFromLeft (150);
+    L.keyLabel = keyCol.removeFromTop (16); keyCol.removeFromTop (2);
+    L.keyBox   = keyCol.removeFromTop (26);
+    L.intervalLabel = intCol.removeFromTop (16); intCol.removeFromTop (2);
+    L.intervalBox   = intCol.removeFromTop (26);
     b.removeFromTop (10);
 
     L.row2 = b.removeFromTop (46);
@@ -231,8 +314,8 @@ void KickFundamentalsEditor::resized()
 {
     const auto L = computeLayout (getLocalBounds());
 
-    targetBox.setBounds (L.targetBox);
-    bodyToggle.setBounds (L.bodyToggle);
+    keyBox.setBounds (L.keyBox);
+    intervalBox.setBounds (L.intervalBox);
     siteLink.setBounds (L.footer);
 
     gateSlider.setBounds     (L.gate.withTrimmedTop (16));
@@ -272,23 +355,24 @@ void KickFundamentalsEditor::drawHero (juce::Graphics& g, juce::Rectangle<int> a
     const float freq = processor.getAnalyzer().getFrequency (0);
 
     int centsNearest = 0;
-    const juce::String note = freqToNoteName (freq, centsNearest);
+    const juce::String note = freqToNoteName (freq, centsNearest); // big chromatic readout
     const bool hasSignal = freq > 0.0f;
 
-    const int targetIdx = targetParam != nullptr ? (int) (targetParam->load() + 0.5f) : 0;
-    const bool useTarget = targetIdx > 0;
+    const int keyIdx      = keyParam      != nullptr ? (int) (keyParam->load()      + 0.5f) : 0;
+    const int intervalIdx = intervalParam != nullptr ? (int) (intervalParam->load() + 0.5f) : 0;
 
-    float cents = (float) centsNearest;
-    juce::String targetName;
-    if (useTarget)
-    {
-        static const char* names[] =
-            { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-        targetName = names[targetIdx - 1];
-        cents = centsToPitchClass (freq, targetIdx - 1);
-    }
+    const float midi = hasSignal ? 69.0f + 12.0f * std::log2 (freq / 440.0f) : 0.0f;
+    const Target target = hasSignal ? resolveTarget (midi, keyIdx, intervalIdx) : Target {};
 
-    const bool inTune = hasSignal && std::abs (cents) <= 5.0f;
+    // Signed cents of the drum relative to the target (+ = drum is sharp/above).
+    const float cents  = hasSignal ? (midi - target.midi) * 100.0f : 0.0f;
+    const bool  inTune = hasSignal && std::abs (cents) <= 5.0f;
+
+    // Non-ASCII glyphs (CharPointer_UTF8 avoids mojibake).
+    const juce::String midDot  (juce::CharPointer_UTF8 ("\xc2\xb7"));       // ·
+    const juce::String arrowUp (juce::CharPointer_UTF8 ("\xe2\x86\x91"));   // ↑
+    const juce::String arrowDn (juce::CharPointer_UTF8 ("\xe2\x96\xbc"));   // ▼
+    const juce::String centCh  (juce::CharPointer_UTF8 ("\xc2\xa2"));       // ¢
 
     auto panel = area;
     g.setColour (juce::Colour (0xff262c36));
@@ -300,38 +384,77 @@ void KickFundamentalsEditor::drawHero (juce::Graphics& g, juce::Rectangle<int> a
 
     auto inner = panel.reduced (18, 12);
 
+    // --- Label row: hero label (+ key context) on the left, Hz on the right ---
+    auto labelRow = inner.removeFromTop (18);
+    juce::String heroLabel (heroLabelFor (currentDrum));
+    if (keyIdx > 0)
+        heroLabel += "  " + midDot + "  " + juce::String (pitchClassName (keyIdx - 1)) + " key";
+
     g.setColour (juce::Colour (0xff7f8b9c));
     g.setFont (juce::Font (13.0f, juce::Font::bold));
-    const juce::String midDot (juce::CharPointer_UTF8 ("\xc2\xb7"));
-    const juce::String baseLabel (heroLabelFor (currentDrum));
-    const juce::String heroLabel = useTarget
-        ? baseLabel + "  " + midDot + "  vs " + targetName
-        : baseLabel;
-    g.drawText (heroLabel, inner.removeFromTop (18), juce::Justification::topLeft);
+    g.drawText (heroLabel, labelRow, juce::Justification::centredLeft);
 
     if (hasSignal)
     {
-        const juce::String hz = juce::String (freq, 1) + " Hz";
-        juce::String off;
-        if (useTarget && std::abs (cents) >= 100.0f)
-            off = (cents >= 0 ? "+" : "") + juce::String (cents / 100.0f, 2) + " st";
-        else
-            off = (cents >= 0 ? "+" : "") + juce::String (juce::roundToInt (cents)) + " cents";
-
         g.setColour (juce::Colour (0xffb7c0cc));
         g.setFont (juce::Font (14.0f));
-        g.drawText (hz + "   " + off,
-                    panel.reduced (18, 12).removeFromTop (18),
-                    juce::Justification::topRight);
+        g.drawText (juce::String (freq, 1) + " Hz", labelRow, juce::Justification::centredRight);
     }
 
-    auto noteArea = inner.removeFromTop (78);
+    // --- Big chromatic note ---------------------------------------------------
+    auto noteArea = inner.removeFromTop (66);
     g.setColour (hasSignal ? juce::Colours::white : juce::Colour (0xff3a4049));
-    g.setFont (juce::Font (72.0f, juce::Font::bold));
+    g.setFont (juce::Font (60.0f, juce::Font::bold));
     g.drawText (hasSignal ? note : juce::String ("--"),
                 noteArea, juce::Justification::centredLeft);
 
-    auto scale = inner.removeFromTop (22).reduced (2, 6);
+    // --- Plain-language "turn this way" readout -------------------------------
+    auto readoutArea = inner.removeFromTop (22);
+    if (hasSignal)
+    {
+        juce::String readout;
+        juce::Colour colour;
+
+        juce::String targetTag;
+        if (keyIdx > 0)
+            targetTag = "  " + midDot + " to " + juce::String (pitchClassName (target.pc))
+                      + " (" + juce::String (juce::CharPointer_UTF8 (target.quality)) + ")";
+
+        if (inTune)
+        {
+            readout = "in tune" + targetTag;
+            colour  = juce::Colour (0xff59c36a);
+        }
+        else
+        {
+            const bool  up  = cents < 0.0f;            // drum below target → raise it
+            const int   c   = juce::roundToInt (std::abs (cents));
+            const int   semis = c / 100;
+            const int   rem   = c % 100;
+
+            juce::String amt;
+            if (semis > 0)
+            {
+                amt = juce::String (semis) + (semis == 1 ? " semitone" : " semitones");
+                if (rem > 0)
+                    amt += " + " + juce::String (rem) + centCh;
+            }
+            else
+            {
+                amt = juce::String (c) + centCh;
+            }
+
+            readout = (up ? arrowUp : arrowDn) + " turn " + (up ? "up" : "down") + " " + amt + targetTag;
+            colour  = juce::Colour (0xffd7a24b);
+        }
+
+        g.setColour (colour);
+        g.setFont (juce::Font (16.0f, juce::Font::bold));
+        g.drawText (readout, readoutArea, juce::Justification::centredLeft);
+    }
+
+    // --- Tuning meter ---------------------------------------------------------
+    auto scale = inner.removeFromTop (20).reduced (2, 5);
     if (hasSignal)
     {
         const float cx = scale.getCentreX();
@@ -438,9 +561,13 @@ void KickFundamentalsEditor::paint (juce::Graphics& g)
 
     drawHero (g, L.hero);
 
+    // KEY / INTERVAL selector labels (uppercase, above each dropdown).
+    const int keyIdx = keyParam != nullptr ? (int) (keyParam->load() + 0.5f) : 0;
     g.setColour (juce::Colour (0xff7f8b9c));
     g.setFont (juce::Font (12.0f, juce::Font::bold));
-    g.drawText ("TUNE TO", L.targetLabel, juce::Justification::centredLeft);
+    g.drawText ("KEY", L.keyLabel, juce::Justification::centredLeft);
+    if (keyIdx > 0) // Interval only applies once a key is chosen.
+        g.drawText ("INTERVAL", L.intervalLabel, juce::Justification::centredLeft);
 
     drawSmallRow (g, L.row2, partialTags[0], 1);
     drawSmallRow (g, L.row3, partialTags[1], 2);

@@ -99,12 +99,12 @@ All knobs live near the top of `Source/KickAnalyzer.h`:
 
 | Control | What it does |
 |---|---|
-| **Tune to** | `Auto` shows cents from the nearest note; pick a note (your track's key) and the readout/tuning dot show how far the kick is from that note instead. |
-| **Gate** | Below this input level the display holds its last reading instead of tracking the silence between hits. Also sets the onset sensitivity in Body-only mode. |
+| **Key** | `Auto` reads the nearest chromatic note. Pick your song's key and the hero shows which way to tune the drum, and how far, to fit it. |
+| **Interval** | Only shown once a key is chosen. `Auto` aims for the nearest safe note (root or 5th); or pin a specific chord tone: Root, ♭3/3, 5, ♭7/7 (the flat carries minor quality). |
+| **Gate** | Below this input level the display holds its last reading instead of tracking the silence between hits. |
 | **Response** | Fast ↔ steady. Trades responsiveness for a rock-steady readout (drives the smoothing amounts). |
-| **Body only** | Skips each kick's transient/punch and analyses only the sustained body, so gliding kicks report their settled resting pitch. |
 
-All four are saved with the project and exposed as host-automatable parameters.
+All are saved with the project and exposed as host-automatable parameters.
 
 ## Layout
 

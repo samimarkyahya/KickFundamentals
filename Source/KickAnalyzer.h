@@ -9,12 +9,8 @@
     incoming signal (i.e. the kick drum's fundamentals) and exposes them,
     ordered from lowest frequency to highest.
 
-    Two analysis modes:
-      - Whole hit  : overlapping frames are analysed continuously and averaged,
-                     reflecting the whole kick.
-      - Body only  : on each detected onset the transient/punch is skipped and a
-                     single window of the sustained body is analysed, giving the
-                     kick's settled resting pitch.
+    Overlapping frames are analysed continuously and averaged, reflecting the
+    whole hit.
 
     Stability comes from a noise gate (holds the reading between hits), spectral
     averaging (loud body dominates, noise averages out) and per-note frequency
@@ -55,13 +51,10 @@ public:
     float getLevelDb (int index) const noexcept;
 
     // --- Runtime parameters (set from processBlock) --------------------------
-    /** Noise-gate threshold in dBFS. Also derives the Body-only onset detector's
-        arm/reset thresholds (well above the gate so it re-triggers on every hit). */
+    /** Noise-gate threshold in dBFS. Holds the last reading between hits. */
     void setGateDb (float db) noexcept
     {
         paramGateDb.store (db);
-        paramOnsetHigh.store (juce::Decibels::decibelsToGain (db + 25.0f)); // arm
-        paramOnsetLow .store (juce::Decibels::decibelsToGain (db + 13.0f)); // reset (hysteresis)
     }
 
     /** 0 = fast/responsive, 1 = steady/rock-solid. Drives both smoothers. */
@@ -71,9 +64,6 @@ public:
         paramMagSmoothing .store (0.40f + r * (0.92f - 0.40f));
         paramFreqSmoothing.store (0.30f + r * (0.90f - 0.30f));
     }
-
-    /** false = analyse the whole hit; true = analyse only the settled body. */
-    void setBodyOnly (bool b) noexcept { paramBodyOnly.store (b); }
 
     /** Frequency window searched for the drum's partials (per drum type). */
     void setFreqRange (float loHz, float hiHz) noexcept
@@ -89,7 +79,7 @@ public:
 
 private:
     void analyseCurrentBlock();
-    bool stageBlockFrom (const std::array<float, fftSize>& src, int startIndex, bool fromBody) noexcept;
+    bool stageBlockFrom (const std::array<float, fftSize>& src, int startIndex) noexcept;
 
     double sampleRateHz = 44100.0;
 
@@ -97,26 +87,13 @@ private:
     juce::dsp::WindowingFunction<float>  window { (size_t) fftSize,
                                                   juce::dsp::WindowingFunction<float>::hann };
 
-    // Whole-hit path: circular capture buffer staged every hopSize samples.
+    // Continuous capture: circular buffer staged every hopSize samples.
     std::array<float, fftSize>       ring {};
     int               writePos   = 0;
     int               hopCounter = 0;
 
-    // Body-only path: onset detection + a dedicated single-shot capture.
-    float envelope          = 0.0f;
-    float envDecay          = 0.0f;   // per-sample release coefficient
-    bool  wasOverThreshold  = false;
-    int   samplesSinceOnset = 1 << 30;
-    int   minOnsetGap       = 0;      // debounce between onsets (samples)
-    int   bodyDelaySamples  = 0;      // skip this much of the punch after onset
-    bool  bodyArmed         = false;
-    int   bodyDelayCounter  = 0;
-    int   captureIndex      = 0;
-    std::array<float, fftSize>       captureBuf {};
-
     std::array<float, fftSize * 2>   fftData {};
     std::atomic<bool> nextBlockReady { false };
-    bool blockIsBody = false;   // did the staged block come from a body capture?
 
     // Message-thread analysis state.
     std::array<float, fftSize / 2 + 1>  smoothedMag {};   // spectral EMA
@@ -130,12 +107,9 @@ private:
     std::atomic<float> paramGateDb        { -55.0f };
     std::atomic<float> paramMagSmoothing  {  0.82f };
     std::atomic<float> paramFreqSmoothing {  0.78f };
-    std::atomic<bool>  paramBodyOnly      { false };
     std::atomic<float> paramMinFreq       {  30.0f };
     std::atomic<float> paramMaxFreq       { 250.0f };
     std::atomic<bool>  paramMainLoudest   { false };
-    std::atomic<float> paramOnsetHigh     { 0.0316f }; // ~-30 dB (arm)
-    std::atomic<float> paramOnsetLow      { 0.0079f }; // ~-42 dB (reset)
 
     std::array<std::atomic<float>, numFundamentals> freqHz;
     std::array<std::atomic<float>, numFundamentals> levelDb;

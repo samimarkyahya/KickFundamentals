@@ -22,21 +22,9 @@ void KickAnalyzer::prepare (double sampleRate)
     shownFreq.fill (0.0f);
     haveShown = false;
     nextBlockReady.store (false);
-
-    // Onset detection / body-capture timing.
-    envelope          = 0.0f;
-    envDecay          = (float) std::exp (-1.0 / (0.050 * sampleRateHz)); // ~50 ms release
-    wasOverThreshold  = false;
-    samplesSinceOnset = 1 << 30;
-    minOnsetGap       = (int) (0.080 * sampleRateHz);  // ignore re-triggers for 80 ms
-    bodyDelaySamples  = (int) (0.030 * sampleRateHz);  // skip the first ~30 ms (punch/glide)
-    bodyArmed         = false;
-    bodyDelayCounter  = 0;
-    captureIndex      = 0;
-    captureBuf.fill (0.0f);
 }
 
-bool KickAnalyzer::stageBlockFrom (const std::array<float, fftSize>& src, int startIndex, bool fromBody) noexcept
+bool KickAnalyzer::stageBlockFrom (const std::array<float, fftSize>& src, int startIndex) noexcept
 {
     // Copy fftSize samples starting (circularly) at startIndex into fftData,
     // but only if the message thread has consumed the previous block.
@@ -47,71 +35,21 @@ bool KickAnalyzer::stageBlockFrom (const std::array<float, fftSize>& src, int st
         fftData[(size_t) i] = src[(size_t) ((startIndex + i) % fftSize)];
 
     std::fill (fftData.begin() + fftSize, fftData.end(), 0.0f);
-    blockIsBody = fromBody;              // written before the release store below
     nextBlockReady.store (true);
     return true;
 }
 
 void KickAnalyzer::pushSample (float sample) noexcept
 {
-    const bool bodyOnly = paramBodyOnly.load();
+    // Continuous overlapping analysis.
+    ring[(size_t) writePos] = sample;
+    writePos = (writePos + 1) % fftSize;
 
-    // --- Onset detection (peak-follower with hysteresis) ---------------------
-    // A rising edge past the (high) arm threshold fires an onset; re-arming only
-    // happens once the envelope falls back below the (low) reset threshold, so
-    // every hit triggers exactly once and the detector never latches.
-    const float a = std::abs (sample);
-    envelope = juce::jmax (a, envelope * envDecay);
-
-    if (envelope < paramOnsetLow.load())
-        wasOverThreshold = false;
-
-    if (envelope > paramOnsetHigh.load() && ! wasOverThreshold && samplesSinceOnset > minOnsetGap)
+    if (++hopCounter >= hopSize)
     {
-        wasOverThreshold  = true;
-        samplesSinceOnset = 0;
-        if (bodyOnly && ! bodyArmed)
-        {
-            bodyArmed        = true;
-            bodyDelayCounter = bodyDelaySamples;
-            captureIndex     = 0;
-        }
-    }
-    if (samplesSinceOnset < (1 << 30)) ++samplesSinceOnset;
-
-    if (bodyOnly)
-    {
-        // Fill a dedicated window with the sustained body only.
-        if (bodyArmed)
-        {
-            if (bodyDelayCounter > 0)
-            {
-                --bodyDelayCounter;
-            }
-            else
-            {
-                captureBuf[(size_t) captureIndex++] = sample;
-                if (captureIndex >= fftSize)
-                {
-                    stageBlockFrom (captureBuf, 0, true);
-                    bodyArmed    = false;
-                    captureIndex = 0;
-                }
-            }
-        }
-    }
-    else
-    {
-        // Whole-hit path: continuous overlapping analysis.
-        ring[(size_t) writePos] = sample;
-        writePos = (writePos + 1) % fftSize;
-
-        if (++hopCounter >= hopSize)
-        {
-            hopCounter = 0;
-            // writePos points at the oldest sample: read the window in order.
-            stageBlockFrom (ring, writePos, false);
-        }
+        hopCounter = 0;
+        // writePos points at the oldest sample: read the window in order.
+        stageBlockFrom (ring, writePos);
     }
 }
 
@@ -133,11 +71,8 @@ void KickAnalyzer::analyseCurrentBlock()
 
     const float rmsDb = juce::Decibels::gainToDecibels ((float) std::sqrt (sumSq / (double) fftSize));
 
-    // The continuous (whole-hit) path gates on level to hold between hits. A
-    // body capture is only staged right after a detected onset, so it is always
-    // a real hit — skip the gate there (short/quiet drums would fail an RMS test
-    // taken over the whole window).
-    if (! blockIsBody && rmsDb < paramGateDb.load())
+    // Gate on level to hold the last reading between hits.
+    if (rmsDb < paramGateDb.load())
         return; // too quiet — keep displaying the previous reading
 
     const float magSmoothing  = paramMagSmoothing.load();

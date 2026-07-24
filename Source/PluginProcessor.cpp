@@ -17,12 +17,18 @@ KickFundamentalsProcessor::createParameterLayout()
         NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.80f));
 
     layout.add (std::make_unique<AudioParameterChoice> (
-        ParameterID { kTargetId, 1 }, "Target Note",
+        ParameterID { kKeyId, 1 }, "Key",
         StringArray { "Auto", "C", "C#", "D", "D#", "E", "F",
                       "F#", "G", "G#", "A", "A#", "B" }, 0));
 
-    layout.add (std::make_unique<AudioParameterBool> (
-        ParameterID { kBodyOnlyId, 1 }, "Body Only", false));
+    // ♭3 and ♭7 carry the note quality (minor/major third & seventh), so the
+    // Key list stays a plain 13 entries. Non-ASCII flats via CharPointer_UTF8.
+    layout.add (std::make_unique<AudioParameterChoice> (
+        ParameterID { kIntervalId, 1 }, "Interval",
+        StringArray { "Auto", "Root",
+                      juce::String (CharPointer_UTF8 ("\xe2\x99\xad" "3")), "3",
+                      "5",
+                      juce::String (CharPointer_UTF8 ("\xe2\x99\xad" "7")), "7" }, 0));
 
     layout.add (std::make_unique<AudioParameterChoice> (
         ParameterID { kDrumId, 1 }, "Drum",
@@ -39,7 +45,6 @@ KickFundamentalsProcessor::KickFundamentalsProcessor()
 {
     gateParam     = apvts.getRawParameterValue (kGateId);
     responseParam = apvts.getRawParameterValue (kResponseId);
-    bodyOnlyParam = apvts.getRawParameterValue (kBodyOnlyId);
     drumParam     = apvts.getRawParameterValue (kDrumId);
 }
 
@@ -83,7 +88,6 @@ void KickFundamentalsProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // Push the current parameter values to the analyser (lock-free atomics).
     if (gateParam     != nullptr) analyzer.setGateDb   (gateParam->load());
     if (responseParam != nullptr) analyzer.setResponse (responseParam->load());
-    if (bodyOnlyParam != nullptr) analyzer.setBodyOnly (bodyOnlyParam->load() > 0.5f);
 
     if (drumParam != nullptr)
     {
