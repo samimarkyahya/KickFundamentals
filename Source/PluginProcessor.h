@@ -44,7 +44,7 @@ public:
     static constexpr const char* kGateId     = "gate";
     static constexpr const char* kResponseId = "response";
     static constexpr const char* kKeyId      = "key";
-    static constexpr const char* kIntervalId = "interval";
+    static constexpr const char* kScaleId    = "scale";
     static constexpr const char* kDrumId     = "drum";
 
     // Per-drum analysis settings.

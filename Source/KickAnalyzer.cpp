@@ -22,6 +22,87 @@ void KickAnalyzer::prepare (double sampleRate)
     shownFreq.fill (0.0f);
     haveShown = false;
     nextBlockReady.store (false);
+
+    // Log-spaced band edges for the cymbal stable-dominant estimator.
+    for (int b = 0; b <= numBands; ++b)
+        bandEdgeHz[(size_t) b] = bandRangeLoHz
+            * std::pow (bandRangeHiHz / bandRangeLoHz, (float) b / (float) numBands);
+    bandAccum.fill (0.0f);
+    selectedBand  = -1;
+    bandSwitchCtr = 0;
+}
+
+int KickAnalyzer::binForBandEdge (int edgeIndex) const noexcept
+{
+    const int e = juce::jlimit (0, numBands, edgeIndex);
+    return juce::jlimit (1, fftSize / 2 - 1,
+                         (int) std::lround (bandEdgeHz[(size_t) e] * fftSize / sampleRateHz));
+}
+
+// Accumulate each band's energy into a slow EMA, then choose the sustained
+// dominant band. The selection only moves when a different band stays clearly
+// louder (bandSwitchRatio) for bandHoldFrames consecutive blocks, so the pick
+// is stable even while individual partials flicker.
+void KickAnalyzer::updateBandEnergies (float minFreqHz, float maxFreqHz) noexcept
+{
+    const float acc = paramMagSmoothing.load(); // steadier Response = slower accumulation
+
+    // Energy comes from the RAW magnitude spectrum (fftData), so this EMA is the
+    // only time-smoothing on the selection — steady but not double-lagged.
+    for (int b = 0; b < numBands; ++b)
+    {
+        const int lo = binForBandEdge (b);
+        const int hi = binForBandEdge (b + 1);
+        float e = 0.0f;
+        for (int i = lo; i < hi; ++i)
+            e += fftData[(size_t) i] * fftData[(size_t) i];
+
+        bandAccum[(size_t) b] = acc * bandAccum[(size_t) b] + (1.0f - acc) * e;
+    }
+
+    const auto centreInRange = [this, minFreqHz, maxFreqHz] (int b)
+    {
+        const float c = std::sqrt (bandEdgeHz[(size_t) b] * bandEdgeHz[(size_t) (b + 1)]);
+        return c >= minFreqHz && c <= maxFreqHz;
+    };
+
+    // Strongest band whose centre lies inside the active search range.
+    int   challenger = -1;
+    float best       = 0.0f;
+    for (int b = 0; b < numBands; ++b)
+        if (centreInRange (b) && bandAccum[(size_t) b] > best)
+        {
+            best       = bandAccum[(size_t) b];
+            challenger = b;
+        }
+
+    if (challenger < 0)
+        return; // no energy in range — hold the current selection
+
+    // (Re)seat the selection if we have none, it has gone silent, or it drifted
+    // out of the current range (e.g. after a drum/range change).
+    if (selectedBand < 0
+        || bandAccum[(size_t) selectedBand] <= 0.0f
+        || ! centreInRange (selectedBand))
+    {
+        selectedBand  = challenger;
+        bandSwitchCtr = 0;
+        return;
+    }
+
+    if (challenger != selectedBand
+        && bandAccum[(size_t) challenger] > bandAccum[(size_t) selectedBand] * bandSwitchRatio)
+    {
+        if (++bandSwitchCtr >= bandHoldFrames)
+        {
+            selectedBand  = challenger;
+            bandSwitchCtr = 0;
+        }
+    }
+    else
+    {
+        bandSwitchCtr = 0;
+    }
 }
 
 bool KickAnalyzer::stageBlockFrom (const std::array<float, fftSize>& src, int startIndex) noexcept
@@ -107,41 +188,101 @@ void KickAnalyzer::analyseCurrentBlock()
     struct Peak { float freq; float mag; };
     std::vector<Peak> peaks;
 
-    for (int i = minBin; i <= maxBin; ++i)
+    // Parabolic (quadratic) interpolation on log magnitudes refines a peak bin
+    // to a fractional bin — essential for an accurate frequency readout.
+    const auto refinePeakInBins = [&] (int lo, int hi) -> Peak
     {
-        const float m = smoothedMag[(size_t) i];
+        lo = juce::jmax (lo, minBin);
+        hi = juce::jmin (hi, maxBin);
+        int   bestBin = -1;
+        float bestMag = 0.0f;
+        for (int i = lo; i <= hi; ++i)
+            if (smoothedMag[(size_t) i] > bestMag) { bestMag = smoothedMag[(size_t) i]; bestBin = i; }
 
-        const bool isLocalMax = m > smoothedMag[(size_t) (i - 1)]
-                             && m >= smoothedMag[(size_t) (i + 1)]
-                             && m >= threshold;
-        if (! isLocalMax)
-            continue;
+        if (bestBin < 1 || bestBin >= halfSize)
+            return { 0.0f, 0.0f };
 
-        // Parabolic (quadratic) interpolation on log magnitudes refines the
-        // peak location to a fractional bin — essential for accurate low notes.
-        const float la = std::log (juce::jmax (smoothedMag[(size_t) (i - 1)], 1.0e-9f));
-        const float lb = std::log (juce::jmax (smoothedMag[(size_t) i],       1.0e-9f));
-        const float lc = std::log (juce::jmax (smoothedMag[(size_t) (i + 1)], 1.0e-9f));
+        const float la = std::log (juce::jmax (smoothedMag[(size_t) (bestBin - 1)], 1.0e-9f));
+        const float lb = std::log (juce::jmax (smoothedMag[(size_t) bestBin],       1.0e-9f));
+        const float lc = std::log (juce::jmax (smoothedMag[(size_t) (bestBin + 1)], 1.0e-9f));
 
         const float denom = la - 2.0f * lb + lc;
         float delta = denom != 0.0f ? 0.5f * (la - lc) / denom : 0.0f;
         delta = juce::jlimit (-0.5f, 0.5f, delta);
 
-        peaks.push_back ({ (float) binToFreq (i + delta), m });
+        return { (float) binToFreq (bestBin + delta), smoothedMag[(size_t) bestBin] };
+    };
+
+    if (paramMainLoudest.load())
+    {
+        // --- Cymbals: sustained-dominant band with selection hysteresis ------
+        updateBandEnergies (minFreqHz, maxFreqHz);
+
+        // Main = refined peak inside the currently selected band.
+        if (selectedBand >= 0)
+        {
+            const Peak p = refinePeakInBins (binForBandEdge (selectedBand),
+                                             binForBandEdge (selectedBand + 1));
+            if (p.freq > 0.0f)
+                peaks.push_back (p);
+        }
+
+        // 2nd/3rd = next strongest bands, ranked by accumulated energy, skipping
+        // the selection and any band that refines to a near-duplicate frequency.
+        std::array<int, numBands> order {};
+        for (int b = 0; b < numBands; ++b) order[(size_t) b] = b;
+        std::sort (order.begin(), order.end(),
+                   [this] (int a, int b) { return bandAccum[(size_t) a] > bandAccum[(size_t) b]; });
+
+        for (int idx = 0; idx < numBands && (int) peaks.size() < numFundamentals; ++idx)
+        {
+            const int b = order[(size_t) idx];
+            if (b == selectedBand || bandAccum[(size_t) b] <= 0.0f)
+                continue;
+
+            // Only bands whose centre sits inside the active search range.
+            const float centre = std::sqrt (bandEdgeHz[(size_t) b] * bandEdgeHz[(size_t) (b + 1)]);
+            if (centre < minFreqHz || centre > maxFreqHz)
+                continue;
+
+            const Peak p = refinePeakInBins (binForBandEdge (b), binForBandEdge (b + 1));
+            if (p.freq <= 0.0f)
+                continue;
+
+            bool duplicate = false;
+            for (const auto& e : peaks)
+                if (juce::jmax (p.freq, e.freq) / juce::jmax (1.0f, juce::jmin (p.freq, e.freq)) < 1.12f)
+                    { duplicate = true; break; } // within ~2 semitones of an existing pick
+            if (! duplicate)
+                peaks.push_back (p);
+        }
     }
+    else
+    {
+        // --- Pitched drums (kick/toms/snare): local maxima, main = LOWEST ----
+        for (int i = minBin; i <= maxBin; ++i)
+        {
+            const float m = smoothedMag[(size_t) i];
 
-    // Keep the three strongest peaks...
-    std::sort (peaks.begin(), peaks.end(),
-               [] (const Peak& x, const Peak& y) { return x.mag > y.mag; });
-    if ((int) peaks.size() > numFundamentals)
-        peaks.resize (numFundamentals);
+            const bool isLocalMax = m > smoothedMag[(size_t) (i - 1)]
+                                 && m >= smoothedMag[(size_t) (i + 1)]
+                                 && m >= threshold;
+            if (! isLocalMax)
+                continue;
 
-    // ...then order them for display. Pitched drums (kick/toms/snare) read the
-    // LOWEST partial as the main note. Cymbals have no low fundamental, so the
-    // ear follows the LOUDEST ring — keep the magnitude order (main = loudest).
-    if (! paramMainLoudest.load())
+            const Peak p = refinePeakInBins (i - 1, i + 1);
+            if (p.freq > 0.0f)
+                peaks.push_back ({ p.freq, m });
+        }
+
+        // Keep the three strongest, then order lowest-first for display.
+        std::sort (peaks.begin(), peaks.end(),
+                   [] (const Peak& x, const Peak& y) { return x.mag > y.mag; });
+        if ((int) peaks.size() > numFundamentals)
+            peaks.resize (numFundamentals);
         std::sort (peaks.begin(), peaks.end(),
                    [] (const Peak& x, const Peak& y) { return x.freq < y.freq; });
+    }
 
     for (int i = 0; i < numFundamentals; ++i)
     {

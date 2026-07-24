@@ -36,6 +36,13 @@ Because a kick has a pitch envelope (it glides down in the first few tens of ms)
 the readout reflects the sustained body of the hit, which is what you usually
 mean by "the note of the kick".
 
+**Cymbals** have no low fundamental — the ear follows the loudest ring, but a hat
+is a dense cloud of fluctuating inharmonic partials, so a plain "loudest bin" pick
+hops around frame to frame. For the Cymbals tab the pitch instead comes from the
+**sustained-dominant band**: energy is accumulated into fixed log-spaced bands over
+time, and the readout only switches bands once a challenger stays clearly louder
+(selection hysteresis). Response sets how sticky that is.
+
 ## Building
 
 You need [CMake](https://cmake.org/) (≥ 3.22) and a C++17 compiler. JUCE is
@@ -99,10 +106,10 @@ All knobs live near the top of `Source/KickAnalyzer.h`:
 
 | Control | What it does |
 |---|---|
-| **Key** | `Auto` reads the nearest chromatic note. Pick your song's key and the hero shows which way to tune the drum, and how far, to fit it. |
-| **Interval** | Only shown once a key is chosen. `Auto` aims for the nearest safe note (root or 5th); or pin a specific chord tone: Root, ♭3/3, 5, ♭7/7 (the flat carries minor quality). |
+| **Key** | `Auto` reads the nearest chromatic note. Pick your song's key and the hero shows the *smallest* tuning nudge that lands the drum on an in-key note. |
+| **Scale** | Only shown once a key is chosen. `Major` / `Minor` sets which seven notes count as in-key; the plugin always snaps to the closest one, so the drum barely moves while still fitting the track. |
 | **Gate** | Below this input level the display holds its last reading instead of tracking the silence between hits. |
-| **Response** | Fast ↔ steady. Trades responsiveness for a rock-steady readout (drives the smoothing amounts). |
+| **Response** | Fast ↔ steady. Trades responsiveness for a rock-steady readout (drives the smoothing amounts, and the cymbal band-selection stickiness). |
 
 All are saved with the project and exposed as host-automatable parameters.
 

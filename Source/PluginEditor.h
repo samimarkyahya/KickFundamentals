@@ -31,7 +31,7 @@ private:
     struct Layout
     {
         juce::Rectangle<int> title, byline, tabs, range, hero, keyLabel, keyBox,
-                             intervalLabel, intervalBox, row2, row3, gate, response, hint, footer;
+                             scaleLabel, scaleBox, row2, row3, gate, response, hint, footer;
     };
     static Layout computeLayout (juce::Rectangle<int> bounds);
 
@@ -56,7 +56,7 @@ private:
     juce::Image logoTitle, logoByline;
 
     juce::Slider   gateSlider, responseSlider;
-    juce::ComboBox keyBox, intervalBox;
+    juce::ComboBox keyBox, scaleBox;
     juce::HyperlinkButton siteLink { "www.faderhead.com",
                                      juce::URL ("https://www.faderhead.com") };
 
@@ -66,11 +66,11 @@ private:
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboAtt  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     std::unique_ptr<SliderAtt> gateAtt, responseAtt;
-    std::unique_ptr<ComboAtt>  keyAtt, intervalAtt;
+    std::unique_ptr<ComboAtt>  keyAtt, scaleAtt;
 
-    std::atomic<float>* keyParam      = nullptr;
-    std::atomic<float>* intervalParam = nullptr;
-    std::atomic<float>* drumParam     = nullptr;
+    std::atomic<float>* keyParam   = nullptr;
+    std::atomic<float>* scaleParam = nullptr;
+    std::atomic<float>* drumParam  = nullptr;
 
     juce::Colour accent { 0xff4a90d9 };
     int currentDrum = -1; // -1 forces the first applyDrumTheme()

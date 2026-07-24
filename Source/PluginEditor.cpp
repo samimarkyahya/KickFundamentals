@@ -44,9 +44,9 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
                                                   BinaryData::logo_byline_pngSize);
 
     auto& apvts = processor.getAPVTS();
-    keyParam      = apvts.getRawParameterValue (KickFundamentalsProcessor::kKeyId);
-    intervalParam = apvts.getRawParameterValue (KickFundamentalsProcessor::kIntervalId);
-    drumParam     = apvts.getRawParameterValue (KickFundamentalsProcessor::kDrumId);
+    keyParam   = apvts.getRawParameterValue (KickFundamentalsProcessor::kKeyId);
+    scaleParam = apvts.getRawParameterValue (KickFundamentalsProcessor::kScaleId);
+    drumParam  = apvts.getRawParameterValue (KickFundamentalsProcessor::kDrumId);
 
     auto styleKnob = [] (juce::Slider& s)
     {
@@ -61,7 +61,7 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     addAndMakeVisible (gateSlider);
     addAndMakeVisible (responseSlider);
 
-    // --- Key + Interval selectors --------------------------------------------
+    // --- Key + Scale selectors -----------------------------------------------
     auto styleCombo = [] (juce::ComboBox& c)
     {
         c.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff20242c));
@@ -77,14 +77,10 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     styleCombo (keyBox);
     addAndMakeVisible (keyBox);
 
-    // Interval quality (♭3/♭7 = minor, 3/7 = major) via CharPointer_UTF8.
-    const juce::String flat3 (juce::CharPointer_UTF8 ("\xe2\x99\xad" "3"));
-    const juce::String flat7 (juce::CharPointer_UTF8 ("\xe2\x99\xad" "7"));
-    const juce::StringArray intervalItems { "Auto", "Root", flat3, "3", "5", flat7, "7" };
-    for (int i = 0; i < intervalItems.size(); ++i)
-        intervalBox.addItem (intervalItems[i], i + 1);
-    styleCombo (intervalBox);
-    addAndMakeVisible (intervalBox);
+    scaleBox.addItem ("Major", 1);
+    scaleBox.addItem ("Minor", 2);
+    styleCombo (scaleBox);
+    addAndMakeVisible (scaleBox);
 
     // --- Site link -----------------------------------------------------------
     siteLink.setColour (juce::HyperlinkButton::textColourId, juce::Colour (0xff7f8b9c));
@@ -102,12 +98,12 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     addAndMakeVisible (row2Zone);
     addAndMakeVisible (row3Zone);
 
-    keyBox.setTooltip ("Pick your song's key. The plugin then shows which way to "
-                       "tune the drum, and how far, to fit it. Leave on Auto to "
-                       "just read the nearest note.");
-    intervalBox.setTooltip ("Which note of the key to aim for. Auto picks the "
-                            "closest safe one for you. Or pin a specific one: "
-                            "Root, 3rd, 5th, 7th.");
+    keyBox.setTooltip ("Pick your song's key. The plugin then shows the smallest "
+                       "tuning nudge that lands the drum on an in-key note. Leave "
+                       "on Auto to just read the nearest note.");
+    scaleBox.setTooltip ("Major or minor - sets which notes count as in-key. "
+                         "The plugin always aims for the closest one, so the drum "
+                         "only moves as little as possible.");
     gateSlider.setTooltip ("How loud a hit must be to read. Raise if it flickers "
                            "on noise; lower for quiet hits.");
     responseSlider.setTooltip ("Left = snappy. Right = rock-steady. "
@@ -117,7 +113,7 @@ KickFundamentalsEditor::KickFundamentalsEditor (KickFundamentalsProcessor& p)
     gateAtt     = std::make_unique<SliderAtt> (apvts, KickFundamentalsProcessor::kGateId,     gateSlider);
     responseAtt = std::make_unique<SliderAtt> (apvts, KickFundamentalsProcessor::kResponseId, responseSlider);
     keyAtt      = std::make_unique<ComboAtt>  (apvts, KickFundamentalsProcessor::kKeyId,      keyBox);
-    intervalAtt = std::make_unique<ComboAtt>  (apvts, KickFundamentalsProcessor::kIntervalId, intervalBox);
+    scaleAtt    = std::make_unique<ComboAtt>  (apvts, KickFundamentalsProcessor::kScaleId,    scaleBox);
 
     applyDrumTheme (drumParam != nullptr ? (int) (drumParam->load() + 0.5f) : 0);
 
@@ -167,9 +163,9 @@ void KickFundamentalsEditor::timerCallback()
             applyDrumTheme (d);
     }
 
-    // The Interval selector only makes sense once a Key is chosen.
+    // The Scale selector only makes sense once a Key is chosen.
     const int keyIdx = keyParam != nullptr ? (int) (keyParam->load() + 0.5f) : 0;
-    intervalBox.setVisible (keyIdx > 0);
+    scaleBox.setVisible (keyIdx > 0);
 
     repaint();
 }
@@ -209,15 +205,15 @@ namespace
     }
 
     // Where the drum should be tuned, given the Key (0=Auto,1=C..12=B) and
-    // Interval (0=Auto,1=Root,2=♭3,3=3,4=5,5=♭7,6=7) selections.
+    // Scale (0=Major,1=Minor). We snap to the NEAREST in-key note so the drum
+    // moves as little as possible while still fitting the track.
     struct Target
     {
         float midi = 0.0f;      // MIDI note to aim for (nearest octave)
         int   pc   = 0;         // its pitch class (0=C..11=B)
-        const char* quality = nullptr; // interval label ("root","5th",...) or null in Auto key
     };
 
-    Target resolveTarget (float midi, int keyIdx, int intervalIdx)
+    Target resolveTarget (float midi, int keyIdx, int scaleIdx)
     {
         Target t;
 
@@ -225,44 +221,32 @@ namespace
         if (keyIdx <= 0)
         {
             const int nearest = juce::roundToInt (midi);
-            t.midi    = (float) nearest;
-            t.pc      = ((nearest % 12) + 12) % 12;
-            t.quality = nullptr;
+            t.midi = (float) nearest;
+            t.pc   = ((nearest % 12) + 12) % 12;
             return t;
         }
 
         const int keyPc = keyIdx - 1;
 
-        // Interval = Auto: pick the nearer of the Root or the 5th (always safe).
-        if (intervalIdx <= 0)
+        // The seven scale degrees (semitones from the root) for major / minor.
+        static const int major[7] = { 0, 2, 4, 5, 7, 9, 11 };
+        static const int minor[7] = { 0, 2, 3, 5, 7, 8, 10 }; // natural minor
+        const int* scale = (scaleIdx == 1) ? minor : major;
+
+        // Nearest occurrence (any octave) of any scale note — the smallest move.
+        float bestDist = 1.0e9f;
+        for (int s = 0; s < 7; ++s)
         {
-            const int   candPc[2]   = { keyPc, (keyPc + 7) % 12 };
-            const char* candName[2] = { "root", "5th" };
-
-            float bestDist = 1.0e9f;
-            for (int i = 0; i < 2; ++i)
+            const int   pc = (keyPc + scale[s]) % 12;
+            const float m  = nearestMidiOfPitchClass (midi, pc);
+            const float d  = std::abs (midi - m);
+            if (d < bestDist)
             {
-                const float m = nearestMidiOfPitchClass (midi, candPc[i]);
-                const float d = std::abs (midi - m);
-                if (d < bestDist)
-                {
-                    bestDist  = d;
-                    t.midi    = m;
-                    t.pc      = candPc[i];
-                    t.quality = candName[i];
-                }
+                bestDist = d;
+                t.midi   = m;
+                t.pc     = pc;
             }
-            return t;
         }
-
-        // A specific chord tone: semitone offset from the key root.
-        static const int   offset[6] = { 0, 3, 4, 7, 10, 11 };
-        static const char* label[6]  = { "root", "\xe2\x99\xad" "3", "3rd", "5th", "\xe2\x99\xad" "7", "7th" };
-        const int i = juce::jlimit (0, 5, intervalIdx - 1);
-
-        t.pc      = (keyPc + offset[i]) % 12;
-        t.midi    = nearestMidiOfPitchClass (midi, t.pc);
-        t.quality = label[i];
         return t;
     }
 }
@@ -286,14 +270,14 @@ KickFundamentalsEditor::Layout KickFundamentalsEditor::computeLayout (juce::Rect
     L.hero = b.removeFromTop (150);
     b.removeFromTop (10);
 
-    auto modeRow = b.removeFromTop (46);
-    auto keyCol  = modeRow.removeFromLeft (150);
+    auto modeRow  = b.removeFromTop (46);
+    auto keyCol   = modeRow.removeFromLeft (150);
     modeRow.removeFromLeft (18);
-    auto intCol  = modeRow.removeFromLeft (150);
+    auto scaleCol = modeRow.removeFromLeft (150);
     L.keyLabel = keyCol.removeFromTop (16); keyCol.removeFromTop (2);
     L.keyBox   = keyCol.removeFromTop (26);
-    L.intervalLabel = intCol.removeFromTop (16); intCol.removeFromTop (2);
-    L.intervalBox   = intCol.removeFromTop (26);
+    L.scaleLabel = scaleCol.removeFromTop (16); scaleCol.removeFromTop (2);
+    L.scaleBox   = scaleCol.removeFromTop (26);
     b.removeFromTop (10);
 
     L.row2 = b.removeFromTop (46);
@@ -315,7 +299,7 @@ void KickFundamentalsEditor::resized()
     const auto L = computeLayout (getLocalBounds());
 
     keyBox.setBounds (L.keyBox);
-    intervalBox.setBounds (L.intervalBox);
+    scaleBox.setBounds (L.scaleBox);
     siteLink.setBounds (L.footer);
 
     gateSlider.setBounds     (L.gate.withTrimmedTop (16));
@@ -358,11 +342,11 @@ void KickFundamentalsEditor::drawHero (juce::Graphics& g, juce::Rectangle<int> a
     const juce::String note = freqToNoteName (freq, centsNearest); // big chromatic readout
     const bool hasSignal = freq > 0.0f;
 
-    const int keyIdx      = keyParam      != nullptr ? (int) (keyParam->load()      + 0.5f) : 0;
-    const int intervalIdx = intervalParam != nullptr ? (int) (intervalParam->load() + 0.5f) : 0;
+    const int keyIdx   = keyParam   != nullptr ? (int) (keyParam->load()   + 0.5f) : 0;
+    const int scaleIdx = scaleParam != nullptr ? (int) (scaleParam->load() + 0.5f) : 0;
 
     const float midi = hasSignal ? 69.0f + 12.0f * std::log2 (freq / 440.0f) : 0.0f;
-    const Target target = hasSignal ? resolveTarget (midi, keyIdx, intervalIdx) : Target {};
+    const Target target = hasSignal ? resolveTarget (midi, keyIdx, scaleIdx) : Target {};
 
     // Signed cents of the drum relative to the target (+ = drum is sharp/above).
     const float cents  = hasSignal ? (midi - target.midi) * 100.0f : 0.0f;
@@ -388,7 +372,8 @@ void KickFundamentalsEditor::drawHero (juce::Graphics& g, juce::Rectangle<int> a
     auto labelRow = inner.removeFromTop (18);
     juce::String heroLabel (heroLabelFor (currentDrum));
     if (keyIdx > 0)
-        heroLabel += "  " + midDot + "  " + juce::String (pitchClassName (keyIdx - 1)) + " key";
+        heroLabel += "  " + midDot + "  " + juce::String (pitchClassName (keyIdx - 1))
+                   + (scaleIdx == 1 ? " minor" : " major");
 
     g.setColour (juce::Colour (0xff7f8b9c));
     g.setFont (juce::Font (13.0f, juce::Font::bold));
@@ -417,8 +402,7 @@ void KickFundamentalsEditor::drawHero (juce::Graphics& g, juce::Rectangle<int> a
 
         juce::String targetTag;
         if (keyIdx > 0)
-            targetTag = "  " + midDot + " to " + juce::String (pitchClassName (target.pc))
-                      + " (" + juce::String (juce::CharPointer_UTF8 (target.quality)) + ")";
+            targetTag = "  " + midDot + " to " + juce::String (pitchClassName (target.pc));
 
         if (inTune)
         {
@@ -561,13 +545,13 @@ void KickFundamentalsEditor::paint (juce::Graphics& g)
 
     drawHero (g, L.hero);
 
-    // KEY / INTERVAL selector labels (uppercase, above each dropdown).
+    // KEY / SCALE selector labels (uppercase, above each dropdown).
     const int keyIdx = keyParam != nullptr ? (int) (keyParam->load() + 0.5f) : 0;
     g.setColour (juce::Colour (0xff7f8b9c));
     g.setFont (juce::Font (12.0f, juce::Font::bold));
     g.drawText ("KEY", L.keyLabel, juce::Justification::centredLeft);
-    if (keyIdx > 0) // Interval only applies once a key is chosen.
-        g.drawText ("INTERVAL", L.intervalLabel, juce::Justification::centredLeft);
+    if (keyIdx > 0) // Scale only applies once a key is chosen.
+        g.drawText ("SCALE", L.scaleLabel, juce::Justification::centredLeft);
 
     drawSmallRow (g, L.row2, partialTags[0], 1);
     drawSmallRow (g, L.row3, partialTags[1], 2);

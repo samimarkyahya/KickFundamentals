@@ -21,14 +21,11 @@ KickFundamentalsProcessor::createParameterLayout()
         StringArray { "Auto", "C", "C#", "D", "D#", "E", "F",
                       "F#", "G", "G#", "A", "A#", "B" }, 0));
 
-    // ♭3 and ♭7 carry the note quality (minor/major third & seventh), so the
-    // Key list stays a plain 13 entries. Non-ASCII flats via CharPointer_UTF8.
+    // Major/minor sets which notes count as in-key; the readout then snaps the
+    // drum to the nearest of them. Only used when a Key is chosen.
     layout.add (std::make_unique<AudioParameterChoice> (
-        ParameterID { kIntervalId, 1 }, "Interval",
-        StringArray { "Auto", "Root",
-                      juce::String (CharPointer_UTF8 ("\xe2\x99\xad" "3")), "3",
-                      "5",
-                      juce::String (CharPointer_UTF8 ("\xe2\x99\xad" "7")), "7" }, 0));
+        ParameterID { kScaleId, 1 }, "Scale",
+        StringArray { "Major", "Minor" }, 0));
 
     layout.add (std::make_unique<AudioParameterChoice> (
         ParameterID { kDrumId, 1 }, "Drum",
