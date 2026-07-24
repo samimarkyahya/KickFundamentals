@@ -29,7 +29,7 @@ KickFundamentalsProcessor::createParameterLayout()
 
     layout.add (std::make_unique<AudioParameterChoice> (
         ParameterID { kDrumId, 1 }, "Drum",
-        StringArray { "Kick", "Toms", "Snare", "Cymbals" }, 0));
+        StringArray { "Kick", "Snare", "Toms", "Cymbals" }, 0));
 
     return layout;
 }
@@ -52,9 +52,9 @@ KickFundamentalsProcessor::configForDrum (int drum) noexcept
 {
     switch (drum)
     {
-        case 1:  return { 60.0f,  500.0f,  false }; // Toms / percussion
-        case 2:  return { 120.0f, 500.0f,  false }; // Snare
-        case 3:  return { 1000.0f, 15000.0f, true }; // Cymbals (main = loudest ring)
+        case 1:  return { 120.0f, 500.0f,  false }; // Snare
+        case 2:  return { 60.0f,  500.0f,  false }; // Toms / percussion
+        case 3:  return { 1000.0f, 15000.0f, true }; // Cymbals / metal (main = loudest ring)
         default: return { 30.0f,  250.0f,  false }; // Kick
     }
 }

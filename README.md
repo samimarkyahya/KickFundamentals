@@ -5,19 +5,19 @@ insert and it continuously shows the tuning of the hit: a big main note with a
 ±50-cent tuning dot, plus two secondary partials — each with its exact frequency
 and cents deviation.
 
-Pick the drum with the **tab bar** (Kick · Toms/Perc · Snare · Cymbals). Each tab
-recolours the interface and switches the analysis to that drum's frequency range:
+Pick the drum with the **tab bar** (Kick · Snare · Toms/Perc · Cymbals/Metal).
+Each tab recolours the interface and switches the analysis to that drum's range:
 
 | Tab | Colour | Range | Main note = |
 |---|---|---|---|
 | Kick | blue | 30–250 Hz | lowest fundamental |
-| Toms / Perc | green | 60–500 Hz | lowest fundamental |
 | Snare | red | 120–500 Hz | lowest fundamental |
-| Cymbals | light grey | 1000–15000 Hz | **loudest** ring partial |
+| Toms / Perc | green | 60–500 Hz | lowest fundamental |
+| Cymbals / Metal | light grey | 1000–15000 Hz | **loudest** ring partial |
 
 The **Toms / Perc** tab suits any pitched percussion with a clear fundamental —
 toms, congas, bongos, timbales, djembe, rototoms. Metallic percussion (cowbell,
-tambourine, bells) has no low fundamental, so use the **Cymbals** tab for those.
+tambourine, bells) has no low fundamental, so use the **Cymbals / Metal** tab.
 
 Pitched drums (kick/toms/snare) read the lowest fundamental as the main note.
 Cymbals have no low fundamental, so the ear follows the loudest ring — that tab

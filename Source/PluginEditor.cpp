@@ -10,26 +10,26 @@ juce::Colour KickFundamentalsEditor::drumAccent (int d)
 {
     switch (d)
     {
-        case 1:  return juce::Colour (0xff2f9160); // Toms   — dark green
-        case 2:  return juce::Colour (0xffdf5b5b); // Snare  — red
+        case 1:  return juce::Colour (0xffdf5b5b); // Snare  — red
+        case 2:  return juce::Colour (0xff2f9160); // Toms   — dark green
         case 3:  return juce::Colour (0xffc6cfda); // Cymbals— light grey
         default: return juce::Colour (0xff4a90d9); // Kick   — blue
     }
 }
 const char* KickFundamentalsEditor::drumTabName (int d)
 {
-    switch (d) { case 1: return "TOMS / PERC"; case 2: return "SNARE"; case 3: return "CYMBALS"; default: return "KICK"; }
+    switch (d) { case 1: return "SNARE"; case 2: return "TOMS/PERC"; case 3: return "CYMBALS/METAL"; default: return "KICK"; }
 }
 const char* KickFundamentalsEditor::heroLabelFor (int d)
 {
-    switch (d) { case 1: return "PERC NOTE"; case 2: return "SNARE NOTE"; case 3: return "CYMBAL NOTE"; default: return "KICK NOTE"; }
+    switch (d) { case 1: return "SNARE NOTE"; case 2: return "PERC NOTE"; case 3: return "CYMBAL NOTE"; default: return "KICK NOTE"; }
 }
 juce::String KickFundamentalsEditor::rangeTextFor (int d)
 {
     switch (d)
     {
-        case 1:  return "60 - 500 Hz";
-        case 2:  return "120 - 500 Hz";
+        case 1:  return "120 - 500 Hz";
+        case 2:  return "60 - 500 Hz";
         case 3:  return "1000 - 15000 Hz";
         default: return "30 - 250 Hz";
     }
